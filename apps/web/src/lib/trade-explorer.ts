@@ -28,16 +28,18 @@ export function tradeExplorerPoints(trades: AnnotatedTrade[], timeZone: string):
     .map((trade) => {
       const opened = Date.parse(trade.openedAt),
         closed = Date.parse(trade.closedAt!);
-      const elapsed = (closed - opened) / 60000;
-      const clock = Number.isFinite(opened)
-        ? clockTime(trade.openedAt, timeZone).split(":").map(Number)
-        : null;
+      const elapsed = trade.durationMs === undefined ? null : trade.durationMs / 60000;
+      const clock =
+        trade.durationMs !== undefined && Number.isFinite(opened)
+          ? clockTime(trade.openedAt, timeZone).split(":").map(Number)
+          : null;
       return {
         key: trade.key,
         symbol: trade.symbol,
         direction: trade.direction,
         closedAt: trade.closedAt!,
-        durationMinutes: Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : null,
+        durationMinutes:
+          elapsed !== null && Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : null,
         entryMinute: clock ? finite(clock[0]! * 60 + clock[1]!) : null,
         netPnl: finite(trade.netPnl),
         realizedR: finite(tradeR(trade)),

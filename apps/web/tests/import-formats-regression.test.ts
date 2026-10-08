@@ -110,6 +110,152 @@ Exec Time,Symbol,Side,Qty,Price
     content: `<html>MetaTrader 4 Closed Transactions<table><tr><td>12345</td><td>2026.01.05 09:30</td><td>buy</td><td>1</td><td>eurusd</td><td>100</td><td>0</td><td>0</td><td>2026.01.05 10:00</td><td>110</td><td>0</td><td>0</td><td>0</td><td>10</td></tr></table></html>`,
   },
 ];
+
+const the5ers = `Symbol,Side,Qty,Fill Price,Profit,Swap,Date/Time,Order ID,Commission,Trade ID,Position ID
+NAS100,Sell,4.02,30690.26,0,0,"09/25/2026, 14:05:37",530461220963583,0,1227080,530461221048170
+NAS100,Buy,4.02,30079.7,2454.45,-41.46,"09/28/2026, 16:48:03",530461221048172,0,1257696,530461221048170`;
+
+const the5ersConverted = `Trade number,Type,Date and time,Price USD,Size (qty),Net PnL USD,Commission USD,Symbol,Swap,Valid
+1,Entry short,2026-09-25T12:05:37.460Z,30690.26,4.02,2412.99,41.46,NAS100,-41.46,true
+1,Exit short,2026-09-28T14:48:03.879Z,30079.7,4.02,2412.99,41.46,NAS100,-41.46,true`;
+
+const propStatement = `Deals
+Symbol,Opening Direction,Closing Time (UTC+2),Entry price,Closing price,Closing quantity,Net USD,Balance USD
+AUDUSD,Buy,14 Sep 2026 02:21:55.496,0.71546,0.71473,14.37 Lots,-1120.87,98879.13
+
+Transactions
+ID,Time (UTC+2),Transaction type,Payment type,Gross USD,Note
+TID5942791,13 Sep 2026 17:18:49.365,Deposit,Balance operations,100000,Initial account balance
+
+Summary
+Deposit,Withdrawal,Total net,Equity,Unr. P&L,Realised P&L,Margin,Free margin,Margin level
+100000,0,100000,98879.13,0,-1120.87,0,98879.13,—
+
+Balance
+98879.13`;
+
+it("automatically creates, reuses and deduplicates a The5ers import account", async () => {
+  db.delete(accounts).run();
+  const preview = await post({ mode: "preview", content: the5ers, timeZone: "Europe/Paris" });
+  expect(await preview.json()).toMatchObject({
+    detected: "the5ers-tradingview",
+    accountResolution: { status: "create", reason: "new" },
+  });
+
+  const first = await post({ mode: "commit", content: the5ers, timeZone: "Europe/Paris" });
+  const imported = await first.json();
+  expect(imported).toMatchObject({ inserted: 2, duplicates: 0 });
+  expect(imported.accountId).toBeTruthy();
+  expect(db.select().from(accounts).all()).toMatchObject([
+    { id: imported.accountId, name: "The5ers TradingView", broker: "The5ers", kind: "import" },
+  ]);
+  expect(db.select().from(trades).all()[0]?.netPnl).toBeCloseTo(2412.99, 2);
+
+  const repeat = await post({ mode: "commit", content: the5ers, timeZone: "Europe/Paris" });
+  expect(await repeat.json()).toMatchObject({
+    accountId: imported.accountId,
+    inserted: 0,
+    duplicates: 2,
+  });
+  expect(db.select().from(accounts).all()).toHaveLength(1);
+});
+
+it("uses overlapping fills to route a growing export to the existing account", async () => {
+  const first = await post({
+    mode: "commit",
+    content: the5ers,
+    timeZone: "Europe/Paris",
+    accountId: "test",
+  });
+  expect(first.status).toBe(200);
+  db.insert(accounts)
+    .values({ id: "other", name: "Other", kind: "import", createdAt: "2026-01-02" })
+    .run();
+
+  const preview = await post({ mode: "preview", content: the5ers, timeZone: "Europe/Paris" });
+  expect(await preview.json()).toMatchObject({
+    accountResolution: { status: "matched", accountId: "test", reason: "overlap" },
+  });
+});
+
+it("deduplicates the same closed trade reconstructed by another file format", async () => {
+  const original = await post({
+    mode: "commit",
+    content: the5ers,
+    timeZone: "Europe/Paris",
+    accountId: "test",
+  });
+  expect(await original.json()).toMatchObject({ inserted: 2, duplicates: 0 });
+
+  const converted = await post({
+    mode: "commit",
+    content: the5ersConverted,
+    timeZone: "Europe/Paris",
+    accountId: "test",
+  });
+  expect(await converted.json()).toMatchObject({ inserted: 0, duplicates: 2 });
+  expect(db.select().from(executions).all()).toHaveLength(2);
+  expect(db.select().from(trades).all()).toHaveLength(1);
+  expect(db.select().from(trades).all()[0]?.netPnl).toBeCloseTo(2412.99, 2);
+});
+
+it("does not guess when multiple accounts remain plausible", async () => {
+  db.insert(accounts)
+    .values({ id: "other", name: "Other", kind: "import", createdAt: "2026-01-02" })
+    .run();
+  const preview = await post({ mode: "preview", content: the5ers, timeZone: "Europe/Paris" });
+  expect(await preview.json()).toMatchObject({
+    accountResolution: { status: "ambiguous", reason: "ambiguous" },
+  });
+  const commit = await post({ mode: "commit", content: the5ers, timeZone: "Europe/Paris" });
+  expect(commit.status).toBe(400);
+  expect(db.select().from(executions).all()).toHaveLength(0);
+});
+
+it("creates and then reuses a source-identified prop account beside another broker", async () => {
+  const preview = await post({ mode: "preview", content: propStatement, timeZone: "UTC" });
+  expect(await preview.json()).toMatchObject({
+    detected: "prop-statement",
+    totals: { executions: 2 },
+    accountResolution: {
+      status: "create",
+      reason: "new",
+      suggestion: { broker: "FTMO", currency: "USD", initialBalance: 100000 },
+    },
+  });
+
+  const first = await post({
+    mode: "commit",
+    content: propStatement,
+    timeZone: "UTC",
+    accountProfile: { accountType: "verification", profitTargetPct: 5 },
+  });
+  const imported = await first.json();
+  expect(imported).toMatchObject({ inserted: 2, duplicates: 0 });
+  expect(imported.accountId).not.toBe("test");
+  expect(db.select().from(accounts).all()).toMatchObject([
+    { id: "test", name: "Regression" },
+    {
+      id: imported.accountId,
+      name: "FTMO 100K - TID5942791",
+      broker: "FTMO",
+      currency: "USD",
+      initialBalance: 100000,
+      accountType: "verification",
+      profitTargetPct: 5,
+    },
+  ]);
+  expect(
+    db.select().from(trades).where(eq(trades.accountId, imported.accountId)).get()?.durationMs,
+  ).toBeNull();
+
+  const repeat = await post({ mode: "commit", content: propStatement, timeZone: "UTC" });
+  expect(await repeat.json()).toMatchObject({
+    accountId: imported.accountId,
+    inserted: 0,
+    duplicates: 2,
+  });
+});
 it.each(cases)(
   "$format previews, saves and reimports without changing trades or reviews",
   async ({ format, content, pnl }) => {

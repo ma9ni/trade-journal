@@ -21,23 +21,25 @@ Two validation tiers:
 - **Real file**: verified against an actual export file from a live account
   (the most valuable contribution this repo can receive).
 
-| Format                             | Kind                         | Detection                             | Cross-checked | Real file |
-| ---------------------------------- | ---------------------------- | ------------------------------------- | ------------- | --------- |
-| TradeZella                         | trades → reconstructed fills | header signature + P&L reconciliation | ✅ (partial²) | ☐         |
-| Tradervue                          | fills                        | header signature                      | ✅ (docs³)    | ☐         |
-| TradingView (paper history)        | fills                        | `Fill Price` header                   | ✅ (docs)     | ☐         |
-| MetaTrader 4 (HTML statement)      | trades → reconstructed fills | HTML + MetaTrader markers             | ☐             | ☐         |
-| Interactive Brokers (activity CSV) | fills                        | `Trades,Header` section rows          | ☐             | ☐         |
-| Interactive Brokers (Flex Query)   | fills                        | `ClientAccountID`/`Date/Time` headers | ✅¹           | ☐         |
-| ThinkorSwim / Schwab (statement)   | fills                        | `Account Trade History` section       | ✅¹           | ☐         |
-| NinjaTrader                        | fills                        | `Instrument`/`Action` headers         | ✅¹           | ✅ (#10)  |
-| Tradovate                          | fills (Filled only)          | `Contract`/`B/S`/`Fill Time` headers  | ✅¹           | ☐         |
-| TopstepX                           | fills (Filled only)          | `ContractName`/`ExecutePrice` headers | ✅¹           | ☐         |
-| Webull (orders, both variants)     | fills (Filled only)          | `Status`/`Filled` headers             | ✅ (docs)     | ☐         |
-| DAS Trader Pro                     | fills                        | `Symb`/`B/S` headers                  | ☐             | ☐         |
-| MetaTrader 5 (deals report)        | fills                        | HTML/CSV deal table signature         | ☐ (fixtures)  | ☐         |
-| TradingView (strategy list)        | trades → reconstructed fills | `List of trades` headers              | ☐ (fixtures)  | ☐         |
-| Generic (column mapper)            | fills                        | user-mapped                           | n/a           | n/a       |
+| Format                             | Kind                         | Detection                             | Cross-checked  | Real file |
+| ---------------------------------- | ---------------------------- | ------------------------------------- | -------------- | --------- |
+| TradeZella                         | trades → reconstructed fills | header signature + P&L reconciliation | ✅ (partial²)  | ☐         |
+| Tradervue                          | fills                        | header signature                      | ✅ (docs³)     | ☐         |
+| TradingView (paper history)        | fills                        | `Fill Price` header                   | ✅ (docs)      | ☐         |
+| MetaTrader 4 (HTML statement)      | trades → reconstructed fills | HTML + MetaTrader markers             | ☐              | ☐         |
+| Interactive Brokers (activity CSV) | fills                        | `Trades,Header` section rows          | ☐              | ☐         |
+| Interactive Brokers (Flex Query)   | fills                        | `ClientAccountID`/`Date/Time` headers | ✅¹            | ☐         |
+| ThinkorSwim / Schwab (statement)   | fills                        | `Account Trade History` section       | ✅¹            | ☐         |
+| NinjaTrader                        | fills                        | `Instrument`/`Action` headers         | ✅¹            | ✅ (#10)  |
+| Tradovate                          | fills (Filled only)          | `Contract`/`B/S`/`Fill Time` headers  | ✅¹            | ☐         |
+| TopstepX                           | fills (Filled only)          | `ContractName`/`ExecutePrice` headers | ✅¹            | ☐         |
+| Webull (orders, both variants)     | fills (Filled only)          | `Status`/`Filled` headers             | ✅ (docs)      | ☐         |
+| DAS Trader Pro                     | fills                        | `Symb`/`B/S` headers                  | ☐              | ☐         |
+| MetaTrader 5 (deals report)        | fills                        | HTML/CSV deal table signature         | ☐ (fixtures)   | ☐         |
+| Prop account statement (FTMO)      | trades → reconstructed fills | `Deals`/`Transactions`/`Summary`      | ✅ (real file) | ✅        |
+| FXCM combined statement            | trades → reconstructed fills | closed tickets in HTML/MHTML          | ✅ (real file) | ✅        |
+| TradingView (strategy list)        | trades → reconstructed fills | `List of trades` headers              | ☐ (fixtures)   | ☐         |
+| Generic (column mapper)            | fills                        | user-mapped                           | n/a            | n/a       |
 
 ¹ [TradeNote community broker parsers](https://github.com/Eleven-Trading/TradeNote/blob/main/src/utils/brokers.js):
 real-user headers for Tradovate (`Fill Time`, `B/S`, `Filled Qty`, `Avg Fill Price`,

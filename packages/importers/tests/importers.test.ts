@@ -22,6 +22,52 @@ NASDAQ:AAPL,Buy,Market,10,185.50,Filled,0,2026-01-05 09:31:00
 NASDAQ:AAPL,Sell,Market,10,187.25,Filled,0,2026-01-05 10:15:00
 NASDAQ:MSFT,Buy,Limit,5,400.00,Cancelled,0,2026-01-05 11:00:00`;
 
+const THE5ERS_CSV = `Symbol,Side,Qty,Fill Price,Profit,Swap,Date/Time,Order ID,Commission,Trade ID,Position ID
+NAS100,Sell,4.02,30690.26,0,0,"09/25/2026, 14:05:37",530461220963583,0,1227080,530461221048170
+NAS100,Buy,4.02,30079.7,2454.45,-41.46,"09/28/2026, 16:48:03",530461221048172,0,1257696,530461221048170
+XAUUSD,Sell,0.51,4293.99,0,0,"09/25/2026, 03:28:51",530461220601159,-2.19,1219097,530461220840264
+XAUUSD,Buy,0.51,4304.09,-515.1,0,"09/25/2026, 12:08:45",530461220840265,-2.2,1225299,530461220840264`;
+
+const PROP_STATEMENT_CSV = `Deals
+Symbol,Opening Direction,Closing Time (UTC+2),Entry price,Closing price,Closing quantity,Net USD,Balance USD
+AUDUSD,Buy,14 Sep 2026 02:21:55.496,0.71546,0.71473,14.37 Lots,-1 120.87,98 879.13
+XAUUSD,Sell,14 Sep 2026 17:42:16.060,4290.33,4298.32,1.01 Lots,-813.06,98 066.07
+XAUUSD,Buy,16 Sep 2026 04:55:04.952,4262.60,4316.88,0.79 Lots,4 217.80,102 283.87
+US100.cash,Sell,17 Sep 2026 21:53:46.498,29374.63,29484.38,7.15 Lots,-784.71,101 499.16
+XAUUSD,Sell,24 Sep 2026 11:42:40.786,4380.71,4253.91,0.35 Lots,4 418.48,105 917.64
+,,,,,,5 917.64,
+
+Transactions
+ID,Time (UTC+2),Transaction type,Payment type,Gross USD,Note
+TID5942791,13 Sep 2026 17:18:49.365,Deposit,Balance operations,100000,Initial account balance
+
+Summary
+Deposit,Withdrawal,Total net,Equity,Unr. P&L,Realised P&L,Margin,Free margin,Margin level
+100 000.00,0.00,100 000.00,105 917.64,0.00,5 917.64,0.00,105 917.64,—
+
+Balance
+105 917.64`;
+
+const FXCM_MHTML = `From: <Saved by Blink>
+Subject: Combined Account Statement
+Content-Type: multipart/related; boundary="fxcm"
+
+--fxcm
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<html><body>
+<table name=3D"account_info_parameters"><tr><td>Trade account#:</td><td>2620281549</td><td>Base currency:</td><td>EUR</td></tr></table>
+<table name=3D"closed_trades">
+<tr><td>Ticket #</td><td>Symbol</td><td>Volume</td><td>Date</td><td>Sold</td><td>Bought</td><td>Gross P/L</td><td>Markups (pips)</td><td>Comm</td><td>Dividends</td><td>Rollover</td><td>Adj</td><td>Net P/L</td><td>Condition</td><td>Created By</td></tr>
+<tr><td>129279879</td><td>EUR/USD</td><td>2,000</td><td>9/25/23 3:03 PM</td><td></td><td>1.06026</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>Mkt</td><td>2620281549</td></tr>
+<tr><td></td><td></td><td></td><td>9/25/23 3:05 PM</td><td>1.05995</td><td></td><td>-0.58</td><td>0.50</td><td>0.00</td><td>0.00</td><td>0.00</td><td>0.00</td><td>-0.58</td><td>S</td><td>2620281549</td></tr>
+<tr><td>Total:</td><td>-0.58</td><td></td><td>0.00</td><td>0.00</td><td>0.00</td><td>0.00</td><td>-0.58</td></tr>
+</table>
+<table name=3D"account_summary"><tr><td></td><td>Beginning Balance</td><td>0.00</td></tr></table>
+</body></html>
+--fxcm--`;
+
 const IBKR_CSV = `Trades,Header,DataDiscriminator,Asset Category,Currency,Symbol,Date/Time,Quantity,T. Price,C. Price,Proceeds,Comm/Fee,Basis,Realized P/L,MTM P/L,Code
 Trades,Data,Order,Stocks,USD,AAPL,"2026-01-05, 09:31:00",100,185.50,187.0,-18550,-1.00,18551,0,150,O
 Trades,Data,Order,Stocks,USD,AAPL,"2026-01-05, 10:15:00",-100,187.25,187.0,18725,-1.00,-18551,173,-25,C
@@ -74,6 +120,81 @@ describe("importers turn any platform's export into normalized executions", () =
     expect(result.executions).toHaveLength(2);
     expect(result.executions[0]!.symbol).toBe("AAPL"); // exchange prefix stripped
     expect(result.skippedRows).toBe(1);
+  });
+
+  it("a The5ers TradingView history preserves positions, reported P&L, swap and fees", () => {
+    const result = parseAuto(THE5ERS_CSV, { timeZone: "Europe/Paris" })!;
+    expect(result.format).toBe("the5ers-tradingview");
+    expect(result.accountHint).toMatchObject({ broker: "The5ers" });
+    expect(result.executions).toHaveLength(4);
+    expect(result.executions[0]!.executedAt).toBe("2026-09-25T01:28:51.000Z");
+    expect(new Set(result.executions.map((row) => row.importMetadata?.group)).size).toBe(2);
+
+    const trades = buildRoundTrips(
+      result.executions.map((execution, index) => ({
+        ...execution,
+        id: `the5ers-${index}`,
+        accountId: "a",
+        source: "import" as const,
+      })),
+    );
+    expect(trades).toHaveLength(2);
+    expect(trades.reduce((total, trade) => total + trade.netPnl, 0)).toBeCloseTo(1893.5, 2);
+    expect(trades.find((trade) => trade.symbol === "XAUUSD")?.netPnl).toBeCloseTo(-519.49, 2);
+  });
+
+  it("a prop statement reconstructs closed trades and extracts its account identity", () => {
+    const result = parseAuto(PROP_STATEMENT_CSV)!;
+    expect(result.format).toBe("prop-statement");
+    expect(result.accountHint).toEqual({
+      broker: "FTMO",
+      externalId: "TID5942791",
+      name: "FTMO 100K - TID5942791",
+      currency: "USD",
+      initialBalance: 100000,
+    });
+    expect(result.executions).toHaveLength(10);
+    expect(result.executions[0]!.executedAt).toBe("2026-09-14T00:21:55.496Z");
+    const trades = buildRoundTrips(
+      result.executions.map((execution, index) => ({
+        ...execution,
+        id: `prop-${index}`,
+        accountId: "a",
+        source: "import" as const,
+      })),
+    );
+    expect(trades).toHaveLength(5);
+    expect(trades.every((trade) => trade.durationMs === undefined)).toBe(true);
+    expect(trades.reduce((total, trade) => total + trade.netPnl, 0)).toBeCloseTo(5917.64, 2);
+  });
+
+  it("an FXCM MHTML statement preserves tickets, account identity and actual duration", () => {
+    const result = parseAuto(FXCM_MHTML, { timeZone: "Europe/Paris" })!;
+    expect(result.format).toBe("fxcm-statement");
+    expect(result.accountHint).toEqual({
+      broker: "FXCM",
+      externalId: "2620281549",
+      name: "FXCM - 2620281549",
+      currency: "EUR",
+      initialBalance: 0,
+    });
+    expect(result.executions).toHaveLength(2);
+    expect(result.executions[0]).toMatchObject({
+      symbol: "EURUSD",
+      side: "buy",
+      quantity: 2000,
+      price: 1.06026,
+      executedAt: "2023-09-25T13:03:00.000Z",
+    });
+    const trades = buildRoundTrips(
+      result.executions.map((execution, index) => ({
+        ...execution,
+        id: `fxcm-${index}`,
+        accountId: "a",
+        source: "import" as const,
+      })),
+    );
+    expect(trades[0]).toMatchObject({ netPnl: -0.58, durationMs: 120_000 });
   });
 
   it("an IBKR activity statement imports only fill rows, with signed quantity as the side", () => {

@@ -1,6 +1,6 @@
 # dependencies
 node_modules/
-
+.idea
 # builds
 dist/
 .next/
@@ -8,7 +8,7 @@ dist/
 out/
 *.tsbuildinfo
 next-env.d.ts
-
+.playwright-cli
 # local data (the journal database lives here by default)
 data/
 *.db

@@ -26,6 +26,7 @@ interface OpenLot {
 interface OpenCycle {
   direction: TradeDirection;
   openedAt: string;
+  openedAtKnown: boolean;
   lots: OpenLot[];
   entryQuantity: number;
   entryNotional: number;
@@ -119,7 +120,10 @@ const finalizeCycle = (
     executionCount: cycle.executionCount,
     executionIds: cycle.executionIds,
     exits: cycle.exits,
-    durationMs: !isOpen && closedAt ? Date.parse(closedAt) - Date.parse(cycle.openedAt) : undefined,
+    durationMs:
+      !isOpen && closedAt && cycle.openedAtKnown
+        ? Date.parse(closedAt) - Date.parse(cycle.openedAt)
+        : undefined,
     ...(contractMultiplier !== undefined ? { contractMultiplier } : {}),
   };
 };
@@ -190,6 +194,7 @@ export const buildRoundTrips = (
           cycle = {
             direction: signedQty > 0 ? "long" : "short",
             openedAt: execution.executedAt,
+            openedAtKnown: execution.importMetadata?.openedAtKnown !== false,
             lots: [],
             entryQuantity: 0,
             entryNotional: 0,

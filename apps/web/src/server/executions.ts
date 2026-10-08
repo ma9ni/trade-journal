@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { ImportedExecution } from "@luxalgo/journal-importers";
+import { buildRoundTrips } from "@luxalgo/journal-core";
 import { db, executions, accounts, trades } from "@/db";
 import { executionHash, newId, nowIso } from "./ids";
 import { rebuildAccount } from "./rebuild";
@@ -19,6 +20,7 @@ export interface InsertResult {
 export type ExecutionSource = "sync" | "import" | "manual";
 
 const MAX_SKIP_REASONS = 5;
+const ECONOMIC_TIME_TOLERANCE_MS = 2_000;
 
 const isFiniteNumber = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
 
@@ -47,6 +49,7 @@ export const executionProblem = (row: unknown, source: ExecutionSource): string 
       Number.isSafeInteger(meta.order) &&
       meta.order >= 0 &&
       (meta.reportedGrossPnl === undefined || Number.isFinite(meta.reportedGrossPnl)) &&
+      (meta.openedAtKnown === undefined || typeof meta.openedAtKnown === "boolean") &&
       (meta.preserveFee === undefined || typeof meta.preserveFee === "boolean"));
   if (!metaOk) return `${label}: invalid imported execution metadata.`;
   return null;
@@ -83,6 +86,87 @@ export const partitionExecutions = (
   return { usable, skipped, skippedReasons };
 };
 
+const importGroupFromTradeKey = (key: string): string | undefined => {
+  const marker = "|import:";
+  const at = key.lastIndexOf(marker);
+  if (at < 0) return undefined;
+  try {
+    return decodeURIComponent(key.slice(at + marker.length));
+  } catch {
+    return undefined;
+  }
+};
+
+const importFamily = (group: string | undefined): string | undefined => {
+  if (!group) return undefined;
+  if (group.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(group) as unknown;
+      if (Array.isArray(parsed) && typeof parsed[0] === "string") return parsed[0];
+    } catch {
+      return undefined;
+    }
+  }
+  return group.split(":", 1)[0];
+};
+
+const closeNumber = (
+  a: number | null | undefined,
+  b: number | null | undefined,
+  tolerance: number,
+) => a !== null && a !== undefined && b !== null && b !== undefined && Math.abs(a - b) <= tolerance;
+
+const closeTime = (a: string | null | undefined, b: string | null | undefined) =>
+  Boolean(
+    a &&
+    b &&
+    Number.isFinite(Date.parse(a)) &&
+    Number.isFinite(Date.parse(b)) &&
+    Math.abs(Date.parse(a) - Date.parse(b)) <= ECONOMIC_TIME_TOLERANCE_MS,
+  );
+
+/**
+ * Detect the same closed trade reconstructed by a different export/parser.
+ * Exact hashes still own same-format retries and timestamp migration guards.
+ */
+const economicDuplicateIds = (accountId: string, rows: ImportedExecution[]): Set<string> => {
+  if (!rows.some((row) => row.importMetadata?.group)) return new Set();
+  const candidates = rows.map((row, index) => ({
+    ...row,
+    id: `candidate-${index}`,
+    accountId,
+    source: "import" as const,
+  }));
+  const rowById = new Map(candidates.map((row) => [row.id, row]));
+  const existing = db.select().from(trades).where(eq(trades.accountId, accountId)).all();
+  const duplicates = new Set<string>();
+
+  for (const incoming of buildRoundTrips(candidates)) {
+    if (!incoming.closedAt || incoming.openQuantity !== 0) continue;
+    const group = rowById.get(incoming.executionIds[0]!)?.importMetadata?.group;
+    const family = importFamily(group);
+    if (!family) continue;
+    const match = existing.some((saved) => {
+      const savedFamily = importFamily(importGroupFromTradeKey(saved.key));
+      return (
+        saved.closedAt !== null &&
+        savedFamily !== undefined &&
+        savedFamily !== family &&
+        saved.symbol === incoming.symbol &&
+        saved.direction === incoming.direction &&
+        closeNumber(saved.quantity, incoming.quantity, 1e-8) &&
+        closeNumber(saved.avgEntry, incoming.avgEntry, 1e-6) &&
+        closeNumber(saved.avgExit, incoming.avgExit, 1e-6) &&
+        closeNumber(saved.netPnl, incoming.netPnl, 0.011) &&
+        closeTime(saved.openedAt, incoming.openedAt) &&
+        closeTime(saved.closedAt, incoming.closedAt)
+      );
+    });
+    if (match) incoming.executionIds.forEach((id) => duplicates.add(id));
+  }
+  return duplicates;
+};
+
 /** Insert fills, rebuild trades, and attach optional manual notes in one transaction. */
 export const insertExecutions = (
   accountId: string,
@@ -100,13 +184,18 @@ export const insertExecutions = (
     db.select({ id: accounts.id }).from(accounts).where(eq(accounts.id, accountId)).get(),
     "Account not found.",
   );
-  const { usable, skipped, skippedReasons } = partitionExecutions(rows, source);
+  const { usable: validated, skipped, skippedReasons } = partitionExecutions(rows, source);
   requireValue(
-    !usable.some((row) => row.ninjaTrader || row.importMetadata?.group?.startsWith("ninjatrader")),
+    !validated.some(
+      (row) => row.ninjaTrader || row.importMetadata?.group?.startsWith("ninjatrader"),
+    ),
     "NinjaTrader fills require the reviewed import endpoint.",
   );
+  const economicDuplicates =
+    source === "import" ? economicDuplicateIds(accountId, validated) : new Set<string>();
+  const usable = validated.filter((_, index) => !economicDuplicates.has(`candidate-${index}`));
   let inserted = 0;
-  let duplicates = 0;
+  let duplicates = validated.length - usable.length;
   const createdAt = nowIso();
   const defaults = getJournalDefaults();
   const note = manualNotes?.trim() ? manualNotes : undefined;

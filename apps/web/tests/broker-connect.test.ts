@@ -144,6 +144,8 @@ it.each(brokers)(
           .filter((field) => !/optional/i.test(field.label))
           .map((field) => [field.key, `test-${field.key}`]),
       ),
+      accountType: "personal",
+      profitTargetPct: null,
     });
     expect(state.push).toHaveBeenCalledWith("/?accounts=connected-test");
   },

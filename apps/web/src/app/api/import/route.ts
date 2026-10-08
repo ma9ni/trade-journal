@@ -18,6 +18,17 @@ import {
   parseStatementWithAi,
   readAiImportPreview,
 } from "@/server/ai-import";
+import {
+  createImportAccount,
+  rememberImportAccount,
+  resolveImportAccount,
+} from "@/server/import-account-resolution";
+import {
+  isAccountType,
+  needsProfitTarget,
+  validProfitTarget,
+  type AccountType,
+} from "@/lib/account-profile";
 
 interface ImportBody {
   mode: "preview" | "commit";
@@ -33,6 +44,7 @@ interface ImportBody {
   encoding?: "text" | "pdf";
   aiPreviewToken?: string;
   aiReviewed?: boolean;
+  accountProfile?: { accountType?: AccountType; profitTargetPct?: number | null };
 }
 
 /**
@@ -57,6 +69,12 @@ export const POST = handler(async (request: Request) => {
   );
   requireValue(body.encoding !== "pdf" || body.ai, "Enable AI parsing to upload PDF statements.");
   requireValue(!body.ai || !body.mapping, "Choose AI parsing or column mapping, not both.");
+  const accountType = body.accountProfile?.accountType ?? "personal";
+  requireValue(isAccountType(accountType), "Invalid account type.");
+  requireValue(
+    !needsProfitTarget(accountType) || validProfitTarget(body.accountProfile?.profitTargetPct),
+    "Challenge and verification accounts need a target between 0 and 100%.",
+  );
   const statement = {
     content: body.content,
     fileName: body.fileName,
@@ -85,6 +103,8 @@ export const POST = handler(async (request: Request) => {
       needsMapping: true,
     });
   }
+
+  const accountResolution = resolveImportAccount(parsed, body.accountId);
 
   if (body.mode === "preview") {
     const symbols = [...new Set(parsed.executions.map((e) => e.symbol))];
@@ -115,26 +135,42 @@ export const POST = handler(async (request: Request) => {
       warnings: parsed.warnings,
       errors: parsed.errors,
       needsSymbol: parsed.needsSymbol,
+      accountResolution,
       reconciliation:
-        parsed.format === "ninjatrader" && body.accountId
-          ? previewNinjaTraderImport(body.accountId, parsed, body.content, timeZone, body.review)
+        parsed.format === "ninjatrader" && accountResolution.accountId
+          ? previewNinjaTraderImport(
+              accountResolution.accountId,
+              parsed,
+              body.content,
+              timeZone,
+              body.review,
+            )
           : undefined,
     });
   }
 
-  if (!body.accountId) return bad("accountId is required to commit");
+  if (accountResolution.status === "ambiguous")
+    return bad("Several accounts could receive this file. Select the destination account once.");
   if (parsed.errors?.length) return bad(parsed.errors.join(" "));
   if (parsed.executions.length === 0) return bad("No executions to import");
+  const accountId =
+    accountResolution.accountId ??
+    (accountResolution.status === "create"
+      ? createImportAccount(accountResolution, {
+          accountType,
+          profitTargetPct: needsProfitTarget(accountType)
+            ? (body.accountProfile?.profitTargetPct ?? null)
+            : null,
+        })
+      : undefined);
+  if (!accountId) return bad("The destination account could not be resolved.");
+  rememberImportAccount(accountId, parsed);
   const result =
     parsed.format === "ninjatrader"
-      ? commitNinjaTraderImport(body.accountId, parsed, body.content, timeZone, body.review)
-      : insertExecutions(
-          body.accountId,
-          parsed.executions as ImportedExecution[],
-          "import",
-          undefined,
-          { preserveFees: Boolean(body.ai) },
-        );
+      ? commitNinjaTraderImport(accountId, parsed, body.content, timeZone, body.review)
+      : insertExecutions(accountId, parsed.executions as ImportedExecution[], "import", undefined, {
+          preserveFees: Boolean(body.ai),
+        });
   // Invalid rows are skipped with a warning rather than failing the whole file.
   const warnings = [
     ...(parsed.warnings ?? []),
@@ -144,7 +180,7 @@ export const POST = handler(async (request: Request) => {
         ]
       : []),
   ];
-  return ok({ detected: parsed.format, ...result, warnings });
+  return ok({ detected: parsed.format, accountId, ...result, warnings });
 });
 
 /** The import page lists what auto-detection understands. */

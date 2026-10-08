@@ -29,7 +29,7 @@ export const POST = handler(async (request: Request) => {
   const tradeLines = dayTrades
     .map(
       (trade) =>
-        `${JSON.stringify(scope.accounts.find((a) => a.id === trade.accountId)?.name)} | ${trade.symbol} ${trade.direction} qty ${trade.quantity} | entry ${trade.avgEntry} → exit ${trade.avgExit} | net ${trade.netPnl.toFixed(2)} | held ${Math.round((trade.durationMs ?? 0) / 60_000)}m` +
+        `${JSON.stringify(scope.accounts.find((a) => a.id === trade.accountId)?.name)} | ${trade.symbol} ${trade.direction} qty ${trade.quantity} | entry ${trade.avgEntry} → exit ${trade.avgExit} | net ${trade.netPnl.toFixed(2)} | held ${trade.durationMs === undefined ? "unknown" : `${Math.round(trade.durationMs / 60_000)}m`}` +
         (trade.annotations?.tags?.length ? ` | tags: ${trade.annotations.tags.join(", ")}` : "") +
         (trade.annotations?.mistakes?.length
           ? ` | mistakes: ${trade.annotations.mistakes.join(", ")}`

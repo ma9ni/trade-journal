@@ -362,12 +362,14 @@ describe("history timestamps preserve journal timezone semantics", () => {
 
 describe("new detection preserves existing import routes", () => {
   it("retains the original registry priority and exact DAS/ThinkorSwim parsing results", () => {
-    expect(FORMATS.slice(0, 12).map((f) => f.id)).toEqual([
+    expect(FORMATS.slice(0, 14).map((f) => f.id)).toEqual([
       "metatrader",
       "ibkr",
       "ibkr-flex",
       "thinkorswim",
       "tradezella",
+      "prop-statement",
+      "the5ers-tradingview",
       "tradervue",
       "topstepx",
       "tradingview",

@@ -33,6 +33,19 @@ export const GET = handler(async (request: Request) => {
     ? accountRows.filter((a) => filters.accounts!.split(",").includes(a.id))
     : accountRows;
   const initialBalance = selected.reduce((total, a) => total + a.initialBalance, 0);
+  const targetAccount = selected.length === 1 ? selected[0] : null;
+  const profitTarget =
+    targetAccount &&
+    targetAccount.initialBalance > 0 &&
+    targetAccount.profitTargetPct != null &&
+    (targetAccount.accountType === "challenge" || targetAccount.accountType === "verification")
+      ? {
+          pnl: targetAccount.initialBalance * (targetAccount.profitTargetPct / 100),
+          balance: targetAccount.initialBalance * (1 + targetAccount.profitTargetPct / 100),
+          percentage: targetAccount.profitTargetPct,
+          currency: targetAccount.currency,
+        }
+      : null;
 
   const { metrics, days, equity } = computeOverview(trades, { timeZone, initialBalance });
   const accountCurrencies = new Map(accountRows.map((a) => [a.id, a.currency]));
@@ -100,5 +113,6 @@ export const GET = handler(async (request: Request) => {
         status: t.status,
       })),
     initialBalance,
+    profitTarget,
   });
 });

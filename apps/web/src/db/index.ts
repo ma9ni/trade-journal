@@ -22,6 +22,14 @@ const createDb = () => {
       if (!columns.some((column) => column.name === "ibkr_sync_time_zone")) {
         sqlite.exec("ALTER TABLE accounts ADD COLUMN ibkr_sync_time_zone TEXT");
       }
+      if (!columns.some((column) => column.name === "account_type")) {
+        sqlite.exec(
+          "ALTER TABLE accounts ADD COLUMN account_type TEXT NOT NULL DEFAULT 'personal'",
+        );
+      }
+      if (!columns.some((column) => column.name === "profit_target_pct")) {
+        sqlite.exec("ALTER TABLE accounts ADD COLUMN profit_target_pct REAL");
+      }
     })
     .immediate();
   // Additive upgrade: existing executions retain their fields and dedup hashes.

@@ -45,6 +45,14 @@ export interface ImportedTrade {
 export interface ParsedImport {
   format: string;
   executions: ImportedExecution[];
+  /** Broker/account facts carried by the export and usable for automatic routing. */
+  accountHint?: {
+    broker?: string;
+    externalId?: string;
+    name?: string;
+    currency?: string;
+    initialBalance?: number;
+  };
   /** Rows the parser saw but could not turn into executions. */
   skippedRows: number;
   warnings: string[];

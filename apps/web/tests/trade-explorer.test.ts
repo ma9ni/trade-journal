@@ -20,6 +20,7 @@ const trade = (patch: Partial<AnnotatedTrade> = {}): AnnotatedTrade => ({
   executionCount: 2,
   executionIds: [],
   exits: [],
+  durationMs: 30.5 * 60_000,
   annotations: { stopLoss: 98, tags: ["setup"] },
   ...patch,
 });
@@ -53,7 +54,11 @@ describe("trade explorer", () => {
       durationMinutes: 30.5,
       entryMinute: 20 * 60 + 30,
     });
-    const dst = trade({ openedAt: "2026-11-01T05:30:00Z", closedAt: "2026-11-01T06:30:00Z" });
+    const dst = trade({
+      openedAt: "2026-11-01T05:30:00Z",
+      closedAt: "2026-11-01T06:30:00Z",
+      durationMs: 60 * 60_000,
+    });
     expect(tradeExplorerPoints([dst], "America/New_York")[0]).toMatchObject({
       durationMinutes: 60,
       entryMinute: 90,
@@ -83,11 +88,11 @@ describe("trade explorer", () => {
   it("excludes invalid axis inputs without fabricating zeroes", () => {
     const rows = tradeExplorerPoints(
       [
-        trade({ key: "reverse", closedAt: "2026-08-31T00:00:00Z" }),
-        trade({ key: "bad-open", openedAt: "invalid" }),
-        trade({ key: "bad-close", closedAt: "invalid" }),
+        trade({ key: "reverse", closedAt: "2026-08-31T00:00:00Z", durationMs: -60_000 }),
+        trade({ key: "bad-open", openedAt: "invalid", durationMs: undefined }),
+        trade({ key: "bad-close", closedAt: "invalid", durationMs: undefined }),
         trade({ key: "infinite", netPnl: Infinity }),
-        trade({ key: "zero-duration", closedAt: "2026-09-01T00:30:00Z" }),
+        trade({ key: "zero-duration", closedAt: "2026-09-01T00:30:00Z", durationMs: 0 }),
       ],
       "UTC",
     );
@@ -98,6 +103,10 @@ describe("trade explorer", () => {
       "zero-duration",
       "reverse",
     ]);
+  });
+  it("does not fabricate duration or entry time when a statement omits the opening time", () => {
+    const [row] = tradeExplorerPoints([trade({ durationMs: undefined })], "UTC");
+    expect(row).toMatchObject({ durationMinutes: null, entryMinute: null });
   });
   it("preserves account/date/tag filtering and does not mutate source trades", () => {
     const input = [

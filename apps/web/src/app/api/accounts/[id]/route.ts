@@ -3,6 +3,12 @@ import { accounts, db, executions, trades } from "@/db";
 import { bad, handler, ok, requireValue } from "@/server/api";
 import { rebuildAccount } from "@/server/rebuild";
 import { hasSyncedExecutions, isIbkrSyncAccount } from "@/server/ibkr-sync-timezone";
+import {
+  isAccountType,
+  needsProfitTarget,
+  validProfitTarget,
+  type AccountType,
+} from "@/lib/account-profile";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -11,6 +17,8 @@ interface PatchBody {
   broker?: string;
   currency?: string;
   initialBalance?: number;
+  accountType?: AccountType;
+  profitTargetPct?: number | null;
   profitCalcMethod?: "fifo" | "lifo" | "wavg";
   autoSync?: boolean;
 }
@@ -28,6 +36,19 @@ export const PATCH = handler(async (request: Request, { params }: Params) => {
   if (body.initialBalance !== undefined) patch.initialBalance = body.initialBalance;
   if (body.autoSync !== undefined) patch.autoSync = body.autoSync;
   if (body.profitCalcMethod !== undefined) patch.profitCalcMethod = body.profitCalcMethod;
+
+  const nextAccountType = body.accountType ?? account.accountType;
+  const nextProfitTarget =
+    body.profitTargetPct !== undefined ? body.profitTargetPct : account.profitTargetPct;
+  if (!isAccountType(nextAccountType)) return bad("Invalid account type");
+  if (needsProfitTarget(nextAccountType) && !validProfitTarget(nextProfitTarget))
+    return bad("Challenge and verification accounts need a target between 0 and 100%.");
+  if (body.accountType !== undefined) patch.accountType = nextAccountType;
+  if (needsProfitTarget(nextAccountType)) {
+    if (body.profitTargetPct !== undefined) patch.profitTargetPct = body.profitTargetPct;
+  } else if (body.accountType !== undefined || body.profitTargetPct !== undefined) {
+    patch.profitTargetPct = null;
+  }
 
   db.transaction(
     () => {

@@ -20,6 +20,22 @@ describe("round trips: a trade is one position cycle, flat to flat", () => {
     expect(trade.durationMs).toBe(3_600_000);
   });
 
+  it("keeps holding duration unknown when a statement omits the opening timestamp", () => {
+    const timestamp = "2026-01-05T15:30:00Z";
+    const trips = buildRoundTrips([
+      fill("AAPL", "buy", 100, 10, timestamp, {
+        source: "import",
+        importMetadata: { id: "entry", group: "close-only", order: 0, openedAtKnown: false },
+      }),
+      fill("AAPL", "sell", 100, 12, timestamp, {
+        source: "import",
+        importMetadata: { id: "exit", group: "close-only", order: 1, openedAtKnown: false },
+      }),
+    ]);
+    expect(trips).toHaveLength(1);
+    expect(trips[0]!.durationMs).toBeUndefined();
+  });
+
   it("selling first opens a short, and profit is made when price falls", () => {
     const trips = buildRoundTrips([
       fill("EURUSD", "sell", 10_000, 1.1, "2026-02-02T08:00:00Z"),

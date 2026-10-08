@@ -19,6 +19,8 @@ export interface ImportMetadata {
   order: number;
   /** Explicit statement gross P&L for the closing portion of this fill. */
   reportedGrossPnl?: number;
+  /** False when a trade-level statement reports only the closing timestamp. */
+  openedAtKnown?: boolean;
   /**
    * The statement supplied this fill's fee explicitly. Storage layers must keep
    * `fee` as-is instead of substituting an account default fee. Round-trip

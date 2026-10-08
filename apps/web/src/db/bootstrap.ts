@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   kind TEXT NOT NULL,
   currency TEXT NOT NULL DEFAULT 'USD',
   initial_balance REAL NOT NULL DEFAULT 0,
+  account_type TEXT NOT NULL DEFAULT 'personal',
+  profit_target_pct REAL,
   profit_calc_method TEXT NOT NULL DEFAULT 'fifo',
   credentials_enc TEXT,
   auto_sync INTEGER NOT NULL DEFAULT 0,

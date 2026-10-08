@@ -4,6 +4,12 @@ import { bad, handler, ok } from "@/server/api";
 import { encryptJson } from "@/server/crypto";
 import { newId, nowIso } from "@/server/ids";
 import { syncAccount } from "@/server/sync";
+import {
+  isAccountType,
+  needsProfitTarget,
+  validProfitTarget,
+  type AccountType,
+} from "@/lib/account-profile";
 
 export const GET = handler((request: Request) => {
   if (new URL(request.url).searchParams.get("summary") === "1") {
@@ -13,6 +19,8 @@ export const GET = handler((request: Request) => {
           id: accounts.id,
           name: accounts.name,
           broker: accounts.broker,
+          accountType: accounts.accountType,
+          profitTargetPct: accounts.profitTargetPct,
           archivedAt: accounts.archivedAt,
         })
         .from(accounts)
@@ -36,6 +44,8 @@ interface CreateBody {
   broker?: string;
   currency?: string;
   initialBalance?: number;
+  accountType?: AccountType;
+  profitTargetPct?: number | null;
   profitCalcMethod?: "fifo" | "lifo" | "wavg";
   credentials?: Record<string, string>;
   autoSync?: boolean;
@@ -47,6 +57,10 @@ export const POST = handler(async (request: Request) => {
   if (body.kind === "sync" && (!body.broker || !body.credentials)) {
     return bad("sync accounts need a broker and credentials");
   }
+  const accountType = body.accountType ?? "personal";
+  if (!isAccountType(accountType)) return bad("Invalid account type");
+  if (needsProfitTarget(accountType) && !validProfitTarget(body.profitTargetPct))
+    return bad("Challenge and verification accounts need a target between 0 and 100%.");
 
   const id = newId();
   db.insert(accounts)
@@ -57,6 +71,8 @@ export const POST = handler(async (request: Request) => {
       kind: body.kind,
       currency: body.currency ?? "USD",
       initialBalance: body.initialBalance ?? 0,
+      accountType,
+      profitTargetPct: needsProfitTarget(accountType) ? body.profitTargetPct : null,
       profitCalcMethod: body.profitCalcMethod ?? "fifo",
       credentialsEnc: body.kind === "sync" ? encryptJson(body.credentials) : null,
       autoSync: body.autoSync ?? body.kind === "sync",

@@ -12,11 +12,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { postJson, useApi } from "@/lib/use-api";
+import { AccountProfileFields } from "@/components/account-profile-fields";
+import {
+  ACCOUNT_TYPE_META,
+  needsProfitTarget,
+  validProfitTarget,
+  type AccountType,
+} from "@/lib/account-profile";
+import { cn } from "@/lib/utils";
 
 interface AccountRow {
   id: string;
   name: string;
   kind: string;
+  accountType: AccountType;
+  profitTargetPct: number | null;
   archivedAt: string | null;
 }
 
@@ -39,6 +49,8 @@ export function AccountPicker({
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [balance, setBalance] = useState("0");
+  const [accountType, setAccountType] = useState<AccountType>("personal");
+  const [profitTarget, setProfitTarget] = useState("10");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [created, setCreated] = useState<AccountRow[]>([]);
@@ -54,7 +66,8 @@ export function AccountPicker({
       !/^[A-Z]{3}$/.test(currency) ||
       !balance.trim() ||
       !Number.isFinite(Number(balance)) ||
-      Number(balance) < 0
+      Number(balance) < 0 ||
+      (needsProfitTarget(accountType) && !validProfitTarget(Number(profitTarget)))
     )
       return;
     setSaving(true);
@@ -65,16 +78,26 @@ export function AccountPicker({
         kind,
         currency,
         initialBalance: Number(balance),
+        accountType,
+        profitTargetPct: needsProfitTarget(accountType) ? Number(profitTarget) : null,
       });
       setCreated((current) => [
         ...current,
-        { id: result.id, name: name.trim(), kind, archivedAt: null },
+        {
+          id: result.id,
+          name: name.trim(),
+          kind,
+          accountType,
+          profitTargetPct: needsProfitTarget(accountType) ? Number(profitTarget) : null,
+          archivedAt: null,
+        },
       ]);
       onChange(result.id);
       refresh();
       setCreating(false);
       setName("");
       setBalance("0");
+      setAccountType("personal");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Account creation failed.");
     } finally {
@@ -93,8 +116,15 @@ export function AccountPicker({
           </SelectTrigger>
           <SelectContent>
             {accounts.map((account) => (
-              <SelectItem key={account.id} value={account.id}>
-                {account.name}
+              <SelectItem
+                key={account.id}
+                value={account.id}
+                className={cn(
+                  "before:mr-2 before:inline-block before:h-2 before:w-2 before:rounded-full",
+                  ACCOUNT_TYPE_META[account.accountType].optionDot,
+                )}
+              >
+                {account.name} · {ACCOUNT_TYPE_META[account.accountType].label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -166,6 +196,13 @@ export function AccountPicker({
               />
             </div>
           </div>
+          <AccountProfileFields
+            accountType={accountType}
+            profitTarget={profitTarget}
+            onAccountTypeChange={setAccountType}
+            onProfitTargetChange={setProfitTarget}
+            disabled={saving}
+          />
           {error && (
             <p role="alert" className="text-sm text-destructive">
               {error}
@@ -179,7 +216,8 @@ export function AccountPicker({
               !/^[A-Z]{3}$/.test(currency) ||
               !balance.trim() ||
               !Number.isFinite(Number(balance)) ||
-              Number(balance) < 0
+              Number(balance) < 0 ||
+              (needsProfitTarget(accountType) && !validProfitTarget(Number(profitTarget)))
             }
           >
             {saving ? "Creating…" : "Create account"}

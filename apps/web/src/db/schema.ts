@@ -66,6 +66,12 @@ export const accounts = sqliteTable("accounts", {
   kind: text("kind", { enum: ["sync", "import", "manual"] }).notNull(),
   currency: text("currency").notNull().default("USD"),
   initialBalance: real("initial_balance").notNull().default(0),
+  accountType: text("account_type", {
+    enum: ["challenge", "verification", "funded", "personal", "demo"],
+  })
+    .notNull()
+    .default("personal"),
+  profitTargetPct: real("profit_target_pct"),
   profitCalcMethod: text("profit_calc_method", { enum: ["fifo", "lifo", "wavg"] })
     .notNull()
     .default("fifo"),

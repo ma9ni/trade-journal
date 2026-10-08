@@ -14,6 +14,9 @@ import {
 import { thinkorswim } from "./formats/thinkorswim";
 import { tradezella } from "./formats/tradezella";
 import { historyFormat, parseHistory } from "./formats/history";
+import { the5ersTradingView } from "./formats/the5ers-tradingview";
+import { propStatement } from "./formats/ftmo-statement";
+import { fxcmStatement } from "./formats/fxcm-statement";
 import type { ImportFormat, ImportOptions, ParsedImport } from "./types";
 
 /**
@@ -26,6 +29,8 @@ const LEGACY_FORMATS: ImportFormat[] = [
   ibkrFlex,
   thinkorswim,
   tradezella,
+  propStatement,
+  the5ersTradingView,
   tradervue,
   topstepx,
   tradingview,
@@ -33,6 +38,7 @@ const LEGACY_FORMATS: ImportFormat[] = [
   tradovate,
   webull,
   dastrader,
+  fxcmStatement,
 ];
 
 export const FORMATS: ImportFormat[] = [...LEGACY_FORMATS, historyFormat];

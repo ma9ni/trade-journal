@@ -59,6 +59,7 @@ export const tradovate = makeFillsFormat({
   },
   rowFilter: (row) => !("status" in row) || /filled/i.test(row["status"] ?? ""),
   normalizeSymbol: (symbol) => symbol.trim().toUpperCase(),
+  account: { externalId: ["account"], broker: "Tradovate" },
 });
 
 /**
@@ -78,6 +79,7 @@ export const topstepx = makeFillsFormat({
     timestamp: ["filledat"],
   },
   rowFilter: (row) => !("status" in row) || /filled/i.test(row["status"] ?? ""),
+  account: { externalId: ["accountname"], broker: "TopstepX" },
 });
 
 /**
@@ -98,6 +100,7 @@ export const ibkrFlex = makeFillsFormat({
     fees: [["commission", "ibcommission"]],
     timestamp: ["datetime"],
   },
+  account: { externalId: ["clientaccountid"], broker: "Interactive Brokers" },
 });
 
 /**

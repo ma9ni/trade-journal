@@ -54,6 +54,12 @@ interface StatsPayload {
   timeZone: string;
   metrics: TradeMetrics;
   initialBalance: number;
+  profitTarget: {
+    pnl: number;
+    balance: number;
+    percentage: number;
+    currency: string;
+  } | null;
   edgeScore: EdgeScore;
   days: DayStats[];
   dailyCumulative: EquityPoint[];
@@ -387,12 +393,15 @@ function DashboardContent({
                   <CardTitle>Daily net cumulative P&L</CardTitle>
                   <HelpHint heading="Cumulative P&L">
                     Running total of net profit and loss over the selected period. The drawdown bars
-                    below show declines from the running equity peak.
+                    below show declines from the running equity peak. For a single evaluation
+                    account, the dashed line marks its profit target.
                   </HelpHint>
                 </CardHeader>
                 <CardContent>
                   <EquityArea
                     data={data.dailyCumulative.map((p) => ({ t: p.t, cumNetPnl: p.cumNetPnl }))}
+                    currency={data.profitTarget?.currency}
+                    target={data.profitTarget}
                   />
                   <RelativeDrawdownBars
                     data={relativeDrawdownCurve(data.dailyCumulative, data.initialBalance)}

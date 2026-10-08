@@ -21,6 +21,11 @@ export interface EquityPointDatum {
   cumNetPnl: number;
 }
 
+export interface EquityTarget {
+  pnl: number;
+  balance: number;
+}
+
 /** Cumulative P&L area — single series, crosshair tooltip, zero baseline. */
 export function EquityArea({
   data,
@@ -29,6 +34,7 @@ export function EquityArea({
   valueLabel = "Cumulative P&L",
   currency = "USD",
   curve = "monotone",
+  target = null,
 }: {
   data: EquityPointDatum[];
   height?: number;
@@ -36,6 +42,7 @@ export function EquityArea({
   valueLabel?: string;
   currency?: string;
   curve?: "monotone" | "stepAfter";
+  target?: EquityTarget | null;
 }) {
   const t = useVizTokens();
   const id = useId().replace(/:/g, "");
@@ -45,9 +52,15 @@ export function EquityArea({
     valueFormat === "percent" ? fmtPercent(value, 2) : fmtMoney(value, currency);
   if (!t) return <div style={{ height }} />;
   const line = t.brand;
-  const top = Math.max(0, ...data.map((point) => point.cumNetPnl));
+  const dataTop = Math.max(0, ...data.map((point) => point.cumNetPnl));
   const bottom = Math.min(0, ...data.map((point) => point.cumNetPnl));
-  const zero = top === bottom ? 100 : (top / (top - bottom)) * 100;
+  const top = Math.max(dataTop, target?.pnl ?? 0);
+  const domainTop =
+    target && target.pnl >= dataTop ? top + Math.max((top - bottom) * 0.08, 1) : top;
+  const zero = domainTop === bottom ? 100 : (domainTop / (domainTop - bottom)) * 100;
+  const targetLabel = target
+    ? `Target ${formatValue(target.balance).replace(/^\+/, "").replace(/\.00$/, "")}`
+    : "";
   return (
     <ChartFrame height={height}>
       <ResponsiveContainer width="100%" height="100%">
@@ -82,12 +95,26 @@ export function EquityArea({
             tickLine={false}
             axisLine={false}
             width={70}
-            domain={[bottom, top === bottom ? 1 : top]}
+            domain={[bottom, domainTop === bottom ? 1 : domainTop]}
             tickFormatter={(value: number) =>
               privateMode ? "••••" : formatValue(value).replace(".00", "")
             }
           />
           <ReferenceLine y={0} stroke={t.baseline} />
+          {target && (
+            <ReferenceLine
+              y={target.pnl}
+              stroke={t.profit}
+              strokeWidth={1.5}
+              strokeDasharray="6 5"
+              label={{
+                value: privateMode ? "Target ••••" : targetLabel,
+                position: "insideTopLeft",
+                fill: t.profit,
+                fontSize: 11,
+              }}
+            />
+          )}
           <Tooltip
             contentStyle={tooltipStyle(t)}
             labelFormatter={(value) => String(value).slice(0, 10)}

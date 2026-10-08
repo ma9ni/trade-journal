@@ -170,12 +170,14 @@ export interface DemoResult {
   alreadyLoaded: boolean;
 }
 
-/** Idempotent: a second call returns the existing demo account untouched. */
+/** Idempotent: a second call restores and normalizes the existing demo account. */
 export const loadDemoData = (): DemoResult => {
   const existing = db.select().from(accounts).where(eq(accounts.broker, DEMO_BROKER)).get();
   if (existing) {
-    if (existing.archivedAt)
-      db.update(accounts).set({ archivedAt: null }).where(eq(accounts.id, existing.id)).run();
+    db.update(accounts)
+      .set({ accountType: "demo", profitTargetPct: null, archivedAt: null })
+      .where(eq(accounts.id, existing.id))
+      .run();
     return { accountId: existing.id, inserted: 0, alreadyLoaded: true };
   }
 
@@ -188,6 +190,8 @@ export const loadDemoData = (): DemoResult => {
       kind: "import",
       currency: "USD",
       initialBalance: 25000,
+      accountType: "demo",
+      profitTargetPct: null,
       profitCalcMethod: "fifo",
       credentialsEnc: null,
       autoSync: false,

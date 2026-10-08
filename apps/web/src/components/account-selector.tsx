@@ -5,11 +5,14 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FlaskConical, WalletCards } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "./ui/select";
 import { postJson, useApi } from "@/lib/use-api";
+import { ACCOUNT_TYPE_META, type AccountType } from "@/lib/account-profile";
+import { cn } from "@/lib/utils";
 
 interface AccountOption {
   id: string;
   name: string;
   broker: string;
+  accountType: AccountType;
   archivedAt: string | null;
 }
 
@@ -77,11 +80,17 @@ export function AccountSelector() {
           {accounts
             .filter((a) => a.broker !== "demo")
             .map((account) => (
-              <SelectItem key={account.id} value={account.id} className="rounded-lg text-xs">
-                <span className="block max-w-64 truncate">
-                  {account.name}
-                  {account.archivedAt ? " (archived)" : ""}
-                </span>
+              <SelectItem
+                key={account.id}
+                value={account.id}
+                className={cn(
+                  "rounded-lg text-xs before:mr-2 before:inline-block before:h-2 before:w-2 before:rounded-full",
+                  ACCOUNT_TYPE_META[account.accountType].optionDot,
+                )}
+              >
+                {account.name}
+                {account.archivedAt ? " (archived)" : ""} ·{" "}
+                {ACCOUNT_TYPE_META[account.accountType].label}
               </SelectItem>
             ))}
           <div className="my-1 border-t" />

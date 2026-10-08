@@ -85,9 +85,10 @@ export const byWeekday = (trades: AnnotatedTrade[], timeZone = "UTC"): BucketSta
 
 /** Performance by hour of trade open ("09", "10", …), ordered by hour. */
 export const byHour = (trades: AnnotatedTrade[], timeZone = "UTC"): BucketStats[] =>
-  groupInto(trades, (t) => [String(hourOf(t.openedAt, timeZone)).padStart(2, "0")]).sort((a, b) =>
-    a.key.localeCompare(b.key),
-  );
+  groupInto(
+    trades.filter((t) => t.status === "open" || t.durationMs !== undefined),
+    (t) => [String(hourOf(t.openedAt, timeZone)).padStart(2, "0")],
+  ).sort((a, b) => a.key.localeCompare(b.key));
 
 export const DURATION_BUCKETS = [
   { key: "< 1m", maxMs: 60_000 },

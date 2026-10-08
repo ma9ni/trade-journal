@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * middleware runtime has no Node crypto, so it gates navigation while the
  * handlers gate data.
  */
-export const middleware = (request: NextRequest) => {
+export const proxy = (request: NextRequest) => {
   if (!process.env.JOURNAL_PASSWORD) return NextResponse.next();
   const { pathname } = request.nextUrl;
   if (pathname === "/login" || pathname === "/api/auth") return NextResponse.next();

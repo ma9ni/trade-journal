@@ -17,6 +17,15 @@ import {
 import { postJson, useApi } from "@/lib/use-api";
 import { fmtMoney } from "@/lib/utils";
 import { MonetaryValue, MonetaryField } from "@/components/privacy";
+import { AccountTypeBadge } from "@/components/account-type-badge";
+import {
+  ACCOUNT_TYPES,
+  ACCOUNT_TYPE_META,
+  needsProfitTarget,
+  validProfitTarget,
+  type AccountType,
+} from "@/lib/account-profile";
+import { cn } from "@/lib/utils";
 
 interface AccountRow {
   id: string;
@@ -25,6 +34,8 @@ interface AccountRow {
   kind: "sync" | "import" | "manual";
   currency: string;
   initialBalance: number;
+  accountType: AccountType;
+  profitTargetPct: number | null;
   profitCalcMethod: "fifo" | "lifo" | "wavg";
   autoSync: boolean;
   lastSyncAt: string | null;
@@ -85,6 +96,10 @@ function Accounts() {
                 <Badge variant="secondary" className="mt-1.5 mr-2">
                   {account.kind}
                 </Badge>
+                <AccountTypeBadge
+                  type={account.accountType}
+                  profitTargetPct={account.profitTargetPct}
+                />
                 {account.broker && (
                   <span className="text-xs font-normal text-muted-foreground">
                     {account.broker}
@@ -150,9 +165,7 @@ function Accounts() {
               )}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="text-xs text-muted-foreground">
-                    Initial balance (anchors drawdown %)
-                  </label>
+                  <label className="text-xs text-muted-foreground">Initial balance</label>
                   <MonetaryField>
                     <Input
                       defaultValue={account.initialBalance || ""}
@@ -195,6 +208,72 @@ function Accounts() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Account type</label>
+                  <Select
+                    value={account.accountType}
+                    onValueChange={async (value) => {
+                      const accountType = value as AccountType;
+                      await postJson(
+                        `/api/accounts/${account.id}`,
+                        {
+                          accountType,
+                          profitTargetPct: needsProfitTarget(accountType)
+                            ? (account.profitTargetPct ?? 10)
+                            : null,
+                        },
+                        "PATCH",
+                      );
+                      refresh();
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ACCOUNT_TYPES.map((type) => (
+                        <SelectItem
+                          key={type}
+                          value={type}
+                          className={cn(
+                            "before:mr-2 before:inline-block before:h-2 before:w-2 before:rounded-full",
+                            ACCOUNT_TYPE_META[type].optionDot,
+                          )}
+                        >
+                          {ACCOUNT_TYPE_META[type].label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {needsProfitTarget(account.accountType) && (
+                  <div>
+                    <label className="text-xs text-muted-foreground">Profit target (%)</label>
+                    <Input
+                      defaultValue={account.profitTargetPct ?? ""}
+                      type="number"
+                      min="0.01"
+                      max="100"
+                      step="0.01"
+                      inputMode="decimal"
+                      onBlur={async (event) => {
+                        const value = Number(event.target.value);
+                        if (!validProfitTarget(value)) {
+                          event.target.value = String(account.profitTargetPct ?? 10);
+                          return;
+                        }
+                        if (value !== account.profitTargetPct) {
+                          await postJson(
+                            `/api/accounts/${account.id}`,
+                            { profitTargetPct: value },
+                            "PATCH",
+                          );
+                          refresh();
+                        }
+                      }}
+                    />
+                  </div>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button

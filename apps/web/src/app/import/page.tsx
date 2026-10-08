@@ -34,6 +34,8 @@ import {
   type AiImportOptions as AiOptions,
 } from "@/lib/ai-import";
 import { Checkbox } from "@/components/ui/checkbox";
+import { AccountProfileFields } from "@/components/account-profile-fields";
+import { needsProfitTarget, validProfitTarget, type AccountType } from "@/lib/account-profile";
 
 interface BrokerInfo {
   id: string;
@@ -62,6 +64,12 @@ interface PreviewResponse {
   warnings?: string[];
   errors?: string[];
   needsSymbol?: boolean;
+  accountResolution?: {
+    status: "matched" | "create" | "ambiguous";
+    accountId?: string;
+    reason: string;
+    suggestion?: { name: string; broker: string; currency: string; initialBalance: number };
+  };
   executions?: {
     symbol: string;
     side: string;
@@ -126,6 +134,8 @@ function ImportView() {
 function FileImport() {
   const router = useRouter();
   const [accountId, setAccountId] = useState("");
+  const [accountType, setAccountType] = useState<AccountType>("personal");
+  const [profitTarget, setProfitTarget] = useState("10");
   const [reviewOptions, setReviewOptions] = useState<ImportReviewOptions>({});
   const changeReview = (options: ImportReviewOptions) => {
     setReviewOptions(options);
@@ -148,6 +158,10 @@ function FileImport() {
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const acceptPreview = (next: PreviewResponse) => {
+    setPreview(next);
+    if (next.accountResolution?.accountId) setAccountId(next.accountResolution.accountId);
+  };
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiOptions, setAiOptions] = useState<AiOptions>({
     provider: "openai",
@@ -218,7 +232,7 @@ function FileImport() {
       setContent(text);
       // Choosing a file alone never sends it to an AI provider.
       if (aiEnabled) return;
-      setPreview(
+      acceptPreview(
         await postJson<PreviewResponse>("/api/import", {
           mode: "preview",
           content: text,
@@ -242,7 +256,7 @@ function FileImport() {
     setBusy(true);
     setError(null);
     try {
-      setPreview(
+      acceptPreview(
         await postJson<PreviewResponse>("/api/import", {
           mode: "preview",
           content,
@@ -267,7 +281,7 @@ function FileImport() {
     setBusy(true);
     setError(null);
     try {
-      setPreview(
+      acceptPreview(
         await postJson<PreviewResponse>("/api/import", {
           mode: "preview",
           content,
@@ -284,10 +298,12 @@ function FileImport() {
   };
 
   const commit = async () => {
-    if (!content || !accountId || !preview) return;
+    if (!content || !preview || (!accountId && preview.accountResolution?.status !== "create"))
+      return;
     setBusy(true);
     try {
       const result = await postJson<{
+        accountId: string;
         inserted: number;
         duplicates: number;
         corrected?: number;
@@ -297,7 +313,7 @@ function FileImport() {
         mode: "commit",
         review: { ...reviewOptions, previewToken: preview.reconciliation?.token ?? undefined },
         content,
-        accountId,
+        accountId: accountId || undefined,
         mapping: mappingApplied ? mapping : undefined,
         fileName,
         symbol,
@@ -311,6 +327,14 @@ function FileImport() {
               aiReviewed,
             }
           : {}),
+        ...(!accountId && preview.accountResolution?.status === "create"
+          ? {
+              accountProfile: {
+                accountType,
+                profitTargetPct: needsProfitTarget(accountType) ? Number(profitTarget) : null,
+              },
+            }
+          : {}),
       });
       const skippedNote =
         result.skipped && result.skipped > 0
@@ -319,7 +343,7 @@ function FileImport() {
       alert(
         `Imported ${result.inserted} executions (${result.duplicates} duplicates skipped, ${result.corrected ?? 0} fee corrections).${skippedNote}`,
       );
-      router.push(`/?accounts=${encodeURIComponent(accountId)}`);
+      router.push(`/?accounts=${encodeURIComponent(result.accountId)}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Import failed");
     } finally {
@@ -601,6 +625,24 @@ function FileImport() {
                   kind="import"
                 />
               </fieldset>
+              {!accountId && preview.accountResolution?.status === "create" && (
+                <div className="space-y-3 border-t pt-3">
+                  <div>
+                    <p className="text-sm font-medium">New account classification</p>
+                    <p className="text-xs text-muted-foreground">
+                      {preview.accountResolution.suggestion?.name ?? "A new account"} will be
+                      created for this statement.
+                    </p>
+                  </div>
+                  <AccountProfileFields
+                    accountType={accountType}
+                    profitTarget={profitTarget}
+                    onAccountTypeChange={setAccountType}
+                    onProfitTargetChange={setProfitTarget}
+                    disabled={busy}
+                  />
+                </div>
+              )}
               {preview.detected === "ninjatrader" && accountId && (
                 <ImportReconciliation
                   review={preview.reconciliation}
@@ -613,12 +655,16 @@ function FileImport() {
               <Button
                 onClick={commit}
                 disabled={
-                  !accountId ||
+                  (!accountId && preview.accountResolution?.status !== "create") ||
                   busy ||
                   !!preview.errors?.length ||
                   !preview.totals.executions ||
                   (Boolean(preview.aiPreviewToken) && !aiReviewed) ||
-                  (preview.detected === "ninjatrader" && !preview.reconciliation?.token)
+                  (preview.detected === "ninjatrader" && !preview.reconciliation?.token) ||
+                  (!accountId &&
+                    preview.accountResolution?.status === "create" &&
+                    needsProfitTarget(accountType) &&
+                    !validProfitTarget(Number(profitTarget)))
                 }
               >
                 {busy ? "Importing…" : "Import"}
@@ -651,6 +697,8 @@ function BrokerConnect() {
   const [brokerId, setBrokerId] = useState("");
   const [name, setName] = useState("");
   const [credentials, setCredentials] = useState<Record<string, string>>({});
+  const [accountType, setAccountType] = useState<AccountType>("personal");
+  const [profitTarget, setProfitTarget] = useState("10");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const broker = data?.brokers.find((b) => b.id === brokerId) ?? null;
@@ -668,6 +716,8 @@ function BrokerConnect() {
         kind: "sync",
         broker: broker.id,
         credentials,
+        accountType,
+        profitTargetPct: needsProfitTarget(accountType) ? Number(profitTarget) : null,
       });
       if (created.sync.skipped > 0) {
         alert(
@@ -731,6 +781,13 @@ function BrokerConnect() {
                 placeholder={broker.displayName}
               />
             </div>
+            <AccountProfileFields
+              accountType={accountType}
+              profitTarget={profitTarget}
+              onAccountTypeChange={setAccountType}
+              onProfitTargetChange={setProfitTarget}
+              disabled={busy}
+            />
             {broker.credentials.map((field) => (
               <div key={field.key}>
                 <Label className="mb-1 block text-xs text-muted-foreground">{field.label}</Label>
@@ -753,6 +810,7 @@ function BrokerConnect() {
                 broker.credentials.some(
                   (field) => !/optional/i.test(field.label) && !credentials[field.key]?.trim(),
                 ) ||
+                (needsProfitTarget(accountType) && !validProfitTarget(Number(profitTarget))) ||
                 (broker.id === "ibkr-flex" && !isTimeZone(settingsData?.importTimeZone))
               }
             >

@@ -24,6 +24,8 @@ export interface FillsFormatSpec {
   /** Skip rows that aren't fills (unfilled orders, section noise). */
   rowFilter?: (row: Row) => boolean;
   normalizeSymbol?: (symbol: string) => string;
+  /** Optional exact broker account identifier carried by every row. */
+  account?: { externalId: string[]; broker: string; namePrefix?: string };
 }
 
 export const parseSide = (value: string | undefined): "buy" | "sell" | null => {
@@ -107,6 +109,33 @@ export const makeFillsFormat = (spec: FillsFormatSpec): ImportFormat => ({
   parse: (content, options): ParsedImport => {
     const records = toRecords(parseCsv(content));
     const { executions, skippedRows } = rowsToFills(records, spec.columns, options, spec);
-    return { format: spec.id, executions, skippedRows, warnings: [] };
+    const accountIds = spec.account
+      ? [
+          ...new Set(
+            records
+              .map((row) => pick(row, spec.account!.externalId)?.trim())
+              .filter((value): value is string => Boolean(value)),
+          ),
+        ]
+      : [];
+    const externalId = accountIds.length === 1 ? accountIds[0] : undefined;
+    return {
+      format: spec.id,
+      executions,
+      skippedRows,
+      warnings:
+        accountIds.length > 1
+          ? ["This file contains multiple source accounts; choose a destination account."]
+          : [],
+      ...(externalId && spec.account
+        ? {
+            accountHint: {
+              externalId,
+              broker: spec.account.broker,
+              name: `${spec.account.namePrefix ?? spec.account.broker} · ${externalId}`,
+            },
+          }
+        : {}),
+    };
   },
 });
