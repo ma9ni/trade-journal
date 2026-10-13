@@ -16,7 +16,7 @@ import {
   NotebookPen,
   Settings,
   ListChecks,
-  BookmarkPlus,
+  Crosshair,
   Wallet,
   Landmark,
   Menu,
@@ -42,7 +42,7 @@ const NAV = [
   { href: "/notebook", label: "Notebook", icon: BookText },
   { href: "/playbooks", label: "Playbooks", icon: BookOpen },
   { href: "/progress", label: "Progress", icon: ListChecks },
-  { href: "/missed", label: "Missed trades", icon: BookmarkPlus },
+  { href: "/opportunities", label: "Opportunities", icon: Crosshair },
 ] as const;
 
 const NAV_SETUP = [

@@ -6,6 +6,7 @@ export interface ExportedAttachment {
   name: string;
   mime: string;
   size: number;
+  sourceUrl?: string | null;
   createdAt: string;
 }
 
@@ -24,13 +25,18 @@ export const attachmentExportRecord = (row: {
   name: string;
   mime: string;
   size: number;
+  sourceUrl?: string | null;
   createdAt: string;
-}): ExportedAttachment => ({
-  id: row.id,
-  ownerType: row.ownerType,
-  ownerId: row.ownerId,
-  name: row.name,
-  mime: row.mime,
-  size: row.size,
-  createdAt: row.createdAt,
-});
+}): ExportedAttachment => {
+  const result: ExportedAttachment = {
+    id: row.id,
+    ownerType: row.ownerType,
+    ownerId: row.ownerId,
+    name: row.name,
+    mime: row.mime,
+    size: row.size,
+    createdAt: row.createdAt,
+  };
+  if (row.sourceUrl) result.sourceUrl = row.sourceUrl;
+  return result;
+};

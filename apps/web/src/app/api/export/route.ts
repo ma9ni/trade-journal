@@ -117,6 +117,7 @@ export const GET = handler(async (request: Request) => {
         name: attachments.name,
         mime: attachments.mime,
         size: attachments.size,
+        sourceUrl: attachments.sourceUrl,
         createdAt: attachments.createdAt,
       })
       .from(attachments)

@@ -6,6 +6,7 @@ import {
   progressRules,
   progressChecks,
   missedTrades,
+  trades,
   playbooks,
   accounts,
 } from "@/db";
@@ -31,16 +32,24 @@ const validDate = (s: unknown): s is string =>
   new Date(s).toISOString().slice(0, 10) === s;
 const text = (s: unknown, max = 100000): s is string => typeof s === "string" && s.length <= max;
 const finite = (n: unknown) => typeof n === "number" && Number.isFinite(n);
+const opportunityStatuses = ["forming", "triggered", "taken", "missed", "invalidated"];
+const directions = ["long", "short", "undecided"];
+const opportunityResource = (resource: string) =>
+  resource === "opportunities" || resource === "missed";
 
 export const GET = handler(async (_request: Request, { params }: Context) => {
   const { resource } = await params;
   if (resource === "templates") return ok({ templates: db.select().from(noteTemplates).all() });
   if (resource === "progress")
     return ok({ rules: rules(), checks: db.select().from(progressChecks).all(), today: today() });
-  if (resource === "missed")
-    return ok({
-      trades: db.select().from(missedTrades).orderBy(desc(missedTrades.observedAt)).all(),
-    });
+  if (opportunityResource(resource)) {
+    const opportunities = db
+      .select()
+      .from(missedTrades)
+      .orderBy(desc(missedTrades.observedAt))
+      .all();
+    return ok({ opportunities, trades: opportunities });
+  }
   if (resource === "defaults") return ok(getJournalDefaults());
   return bad("Unknown resource", 404);
 });
@@ -98,37 +107,80 @@ export const POST = handler(async (request: Request, { params }: Context) => {
       .run();
     return ok({ id });
   }
-  if (resource === "missed") {
+  if (opportunityResource(resource)) {
+    const status = b.status ?? (resource === "missed" ? "missed" : "forming");
+    const direction = b.direction ?? "undecided";
+    const timeframe = b.timeframe ?? "unknown";
     requireValue(
-      text(b.symbol, 80) && b.symbol.trim() && ["long", "short"].includes(b.direction),
+      text(b.symbol, 80) && b.symbol.trim() && directions.includes(direction),
       "Enter a symbol and direction.",
+    );
+    requireValue(opportunityStatuses.includes(status), "Choose a valid opportunity status.");
+    requireValue(
+      text(timeframe, 20) && (timeframe === "unknown" || /^[1-9]\d*(m|h|d|w)$/.test(timeframe)),
+      "Enter a valid timeframe such as 5m, 1h or 1d.",
+    );
+    requireValue(
+      status === "forming" || status === "invalidated" || direction !== "undecided",
+      "Choose a direction once the setup is triggered.",
     );
     requireValue(
       text(b.observedAt, 40) && !isNaN(Date.parse(b.observedAt)),
       "Enter a valid observation time.",
     );
-    requireValue(text(b.notes ?? ""), "Notes are too long.");
+    requireValue(
+      b.triggeredAt == null || (text(b.triggeredAt, 40) && !isNaN(Date.parse(b.triggeredAt))),
+      "Enter a valid trigger time.",
+    );
+    requireValue(
+      text(b.notes ?? "") && text(b.missedReason ?? "", 500),
+      "Notes or reason are too long.",
+    );
     for (const key of ["entry", "stop", "target"])
       requireValue(b[key] == null || finite(b[key]), `Invalid ${key} price.`);
     requireValue(
       !b.playbookId || db.select().from(playbooks).where(eq(playbooks.id, b.playbookId)).get(),
       "Strategy not found.",
     );
+    requireValue(
+      !b.accountId || db.select().from(accounts).where(eq(accounts.id, b.accountId)).get(),
+      "Account not found.",
+    );
+    const linkedTrade = b.linkedTradeKey
+      ? db.select().from(trades).where(eq(trades.key, b.linkedTradeKey)).get()
+      : null;
+    requireValue(!b.linkedTradeKey || linkedTrade, "Linked trade not found.");
+    requireValue(
+      !linkedTrade || !b.accountId || linkedTrade.accountId === b.accountId,
+      "The linked trade belongs to another account.",
+    );
+    const existing = b.id
+      ? db.select().from(missedTrades).where(eq(missedTrades.id, b.id)).get()
+      : null;
     const values = {
+      accountId: b.accountId || null,
       symbol: b.symbol.trim().toUpperCase(),
-      direction: b.direction,
+      direction,
+      timeframe,
+      status,
       observedAt: new Date(b.observedAt).toISOString(),
+      triggeredAt: b.triggeredAt ? new Date(b.triggeredAt).toISOString() : null,
       playbookId: b.playbookId || null,
       entry: b.entry ?? null,
       stop: b.stop ?? null,
       target: b.target ?? null,
+      linkedTradeKey: b.linkedTradeKey || null,
+      missedReason: b.missedReason ?? "",
       notes: b.notes ?? "",
+      reviewedAt:
+        b.reviewed === true
+          ? (existing?.reviewedAt ?? nowIso())
+          : b.reviewed === false
+            ? null
+            : (existing?.reviewedAt ?? null),
     };
     if (b.id) {
-      requireValue(
-        db.select().from(missedTrades).where(eq(missedTrades.id, b.id)).get(),
-        "Missed trade not found.",
-      );
+      requireValue(existing, "Opportunity not found.");
       db.update(missedTrades).set(values).where(eq(missedTrades.id, b.id)).run();
       return ok({ id: b.id });
     }
@@ -161,7 +213,7 @@ export const DELETE = handler(async (request: Request, { params }: Context) => {
   if (resource === "templates") db.delete(noteTemplates).where(eq(noteTemplates.id, b.id)).run();
   else if (resource === "progress")
     db.update(progressRules).set({ archivedAt: today() }).where(eq(progressRules.id, b.id)).run();
-  else if (resource === "missed")
+  else if (opportunityResource(resource))
     db.update(missedTrades)
       .set({ archivedAt: b.restore ? null : nowIso() })
       .where(eq(missedTrades.id, b.id))

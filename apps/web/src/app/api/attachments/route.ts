@@ -4,6 +4,7 @@ import { handler, ok, requireValue } from "@/server/api";
 import { newId, nowIso } from "@/server/ids";
 import { attachmentMime, MAX_ATTACHMENT_SIZE } from "@/lib/attachment-validation";
 function owner(type: string, id: string) {
+  if (type === "opportunity") type = "missed";
   if (type === "prop-account")
     return !!db
       .select({ id: propAccounts.id })
@@ -33,11 +34,28 @@ function owner(type: string, id: string) {
     new Date(id).toISOString().slice(0, 10) === id
   );
 }
+const roles = ["general", "before", "context", "after"] as const;
+type AttachmentRole = (typeof roles)[number];
+const validRole = (value: string): value is AttachmentRole =>
+  roles.includes(value as AttachmentRole);
+const externalUrl = (value: unknown) => {
+  if (typeof value !== "string" || value.length > 2048) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password ? url.toString() : null;
+  } catch {
+    return null;
+  }
+};
+const storedType = (type: string) => (type === "opportunity" ? "missed" : type);
+
 export const GET = handler((request: Request) => {
   const p = new URL(request.url).searchParams;
   const type = p.get("type") ?? "",
-    id = p.get("id") ?? "";
+    id = p.get("id") ?? "",
+    role = p.get("role");
   requireValue(owner(type, id), "Attachment owner not found.");
+  requireValue(role === null || validRole(role), "Invalid attachment role.");
   return ok({
     attachments: db
       .select({
@@ -45,13 +63,51 @@ export const GET = handler((request: Request) => {
         name: attachments.name,
         mime: attachments.mime,
         size: attachments.size,
+        role: attachments.role,
+        sourceUrl: attachments.sourceUrl,
       })
       .from(attachments)
-      .where(and(eq(attachments.ownerType, type), eq(attachments.ownerId, id)))
+      .where(
+        and(
+          eq(attachments.ownerType, storedType(type)),
+          eq(attachments.ownerId, id),
+          role
+            ? eq(attachments.role, role as "general" | "before" | "context" | "after")
+            : undefined,
+        ),
+      )
       .all(),
   });
 });
 export const POST = handler(async (request: Request) => {
+  if (request.headers.get("content-type")?.includes("application/json")) {
+    const body = (await request.json()) as Record<string, unknown>;
+    const type = String(body.type ?? ""),
+      ownerId = String(body.id ?? ""),
+      role = String(body.role ?? "general"),
+      sourceUrl = externalUrl(body.url);
+    requireValue(owner(type, ownerId), "Attachment owner not found.");
+    requireValue(validRole(role), "Invalid attachment role.");
+    requireValue(sourceUrl, "Paste a valid HTTPS link.");
+    const url = new URL(sourceUrl);
+    const label = `${url.hostname}${url.pathname === "/" ? "" : url.pathname}`.slice(0, 200);
+    const id = newId();
+    db.insert(attachments)
+      .values({
+        id,
+        ownerType: storedType(type),
+        ownerId,
+        name: label,
+        mime: "application/x.external-link",
+        size: 0,
+        role,
+        sourceUrl,
+        data: Buffer.alloc(0),
+        createdAt: nowIso(),
+      })
+      .run();
+    return ok({ id });
+  }
   requireValue(
     Number(request.headers.get("content-length") ?? 0) <= MAX_ATTACHMENT_SIZE + 10000,
     "Files must be 8 MB or smaller.",
@@ -59,8 +115,10 @@ export const POST = handler(async (request: Request) => {
   const form = await request.formData();
   const type = String(form.get("type") ?? ""),
     ownerId = String(form.get("id") ?? ""),
-    file = form.get("file");
+    file = form.get("file"),
+    role = String(form.get("role") ?? "general");
   requireValue(owner(type, ownerId), "Attachment owner not found.");
+  requireValue(validRole(role), "Invalid attachment role.");
   requireValue(
     file instanceof File && file.size > 0 && file.size <= MAX_ATTACHMENT_SIZE,
     "Choose a file up to 8 MB.",
@@ -72,11 +130,13 @@ export const POST = handler(async (request: Request) => {
   db.insert(attachments)
     .values({
       id,
-      ownerType: type,
+      ownerType: storedType(type),
       ownerId,
       name: file.name.slice(0, 200),
       mime,
       size: bytes.length,
+      role,
+      sourceUrl: null,
       data: bytes,
       createdAt: nowIso(),
     })

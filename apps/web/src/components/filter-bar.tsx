@@ -49,8 +49,16 @@ export function FilterBar({ title, actions }: { title: string; actions?: React.R
     params = useSearchParams();
   const filters = useFilters();
   const showFilters =
-    ["/", "/reports", "/trades", "/calendar", "/journal", "/playbooks"].includes(pathname) ||
-    pathname.startsWith("/journal/");
+    [
+      "/",
+      "/reports",
+      "/trades",
+      "/calendar",
+      "/journal",
+      "/playbooks",
+      "/opportunities",
+      "/missed",
+    ].includes(pathname) || pathname.startsWith("/journal/");
   const [open, setOpen] = useState(false),
     [draft, setDraft] = useState<AnalysisFilters>({});
   const filterTitle = useRef<HTMLHeadingElement>(null);

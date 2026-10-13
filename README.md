@@ -275,6 +275,59 @@ pnpm format:check  # prettier
 pnpm build         # production build
 ```
 
+## Deployment on Fly.io (Zero-cost Self-Hosting)
+
+Trade Journal can be deployed for **0 € / month** on [Fly.io](https://fly.io) with persistent storage (SQLite and uploaded screenshots/attachments are retained across deployments).
+
+### Live Production App
+- **Live URL:** [https://trade-journal-ahmed.fly.dev/](https://trade-journal-ahmed.fly.dev/)
+
+### Initial Setup & Commands
+```bash
+# 1. Install Fly CLI
+curl -L https://fly.io/install.sh | sh
+source ~/.bashrc
+
+# 2. Login to your Fly account
+flyctl auth login
+
+# 3. Create persistent 3GB volume (Free Tier: up to 3GB included)
+flyctl volumes create data --app trade-journal-ahmed --size 3 --region cdg
+
+# 4. (Optional) Set access password
+flyctl secrets set JOURNAL_PASSWORD="your-strong-password"
+
+# 5. Manual Deploy
+flyctl deploy --ha=false
+```
+
+### Useful Operations & Monitoring
+```bash
+# View real-time logs
+flyctl logs
+
+# Check application and volume status
+flyctl status
+flyctl volumes list
+
+# SSH into the container
+flyctl ssh console
+
+# Restart machine
+flyctl restart
+```
+
+### Automatic CI/CD Pipeline (Deploy on `push` to `main`)
+A GitHub Actions workflow is configured in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) to automatically redeploy the app whenever code is pushed to the `main` branch.
+
+**To activate GitHub Actions deployment:**
+1. Go to your GitHub repository: **Settings > Secrets and variables > Actions**.
+2. Click **New repository secret**.
+3. Name: `FLY_API_TOKEN`
+4. Value: Paste your Fly deploy token (generate via `flyctl tokens create deploy`).
+
+---
+
 ## Principles
 
 MIT. No journal analytics or tracking service. The self-hosted journal stands alone; the hosted journal inside LuxAlgo is a separate service built on the same open engine. LuxAlgo integrations are optional bridges, never dependencies. Sanctioned APIs only.

@@ -15,7 +15,7 @@ data/
 *.db-journal
 *.db-wal
 *.db-shm
-
+~/.fly/bin/flyctl secrets set JOURNAL_PASSWORD="Cocacola01?"
 # env
 .env
 .env.local

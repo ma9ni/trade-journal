@@ -210,6 +210,10 @@ export const attachments = sqliteTable("attachments", {
   name: text("name").notNull(),
   mime: text("mime").notNull(),
   size: integer("size").notNull(),
+  role: text("role", { enum: ["general", "before", "context", "after"] })
+    .notNull()
+    .default("general"),
+  sourceUrl: text("source_url"),
   data: blob("data", { mode: "buffer" }).notNull(),
   createdAt: text("created_at").notNull(),
 });
@@ -241,14 +245,27 @@ export const progressChecks = sqliteTable("progress_checks", {
 });
 export const missedTrades = sqliteTable("missed_trades", {
   id: text("id").primaryKey(),
+  accountId: text("account_id").references(() => accounts.id, { onDelete: "set null" }),
   symbol: text("symbol").notNull(),
-  direction: text("direction").notNull(),
+  direction: text("direction", { enum: ["long", "short", "undecided"] }).notNull(),
+  timeframe: text("timeframe").notNull().default("unknown"),
+  status: text("status", {
+    enum: ["forming", "triggered", "taken", "missed", "invalidated"],
+  })
+    .notNull()
+    .default("missed"),
   observedAt: text("observed_at").notNull(),
+  triggeredAt: text("triggered_at"),
   playbookId: text("playbook_id"),
   entry: real("entry"),
   stop: real("stop"),
   target: real("target"),
+  linkedTradeKey: text("linked_trade_key").references(() => trades.key, {
+    onDelete: "set null",
+  }),
+  missedReason: text("missed_reason").notNull().default(""),
   notes: text("notes").notNull().default(""),
+  reviewedAt: text("reviewed_at"),
   createdAt: text("created_at").notNull(),
   archivedAt: text("archived_at"),
 });

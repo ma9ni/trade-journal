@@ -37,6 +37,32 @@ const createDb = () => {
   if (!executionColumns.some((column) => column.name === "import_metadata_json")) {
     sqlite.exec("ALTER TABLE executions ADD COLUMN import_metadata_json TEXT");
   }
+  const attachmentColumns = sqlite.pragma("table_info(attachments)") as { name: string }[];
+  if (!attachmentColumns.some((column) => column.name === "role")) {
+    sqlite.exec("ALTER TABLE attachments ADD COLUMN role TEXT NOT NULL DEFAULT 'general'");
+  }
+  if (!attachmentColumns.some((column) => column.name === "source_url")) {
+    sqlite.exec("ALTER TABLE attachments ADD COLUMN source_url TEXT");
+  }
+  const opportunityColumns = sqlite.pragma("table_info(missed_trades)") as { name: string }[];
+  const opportunityUpgrades = [
+    ["account_id", "TEXT"],
+    ["timeframe", "TEXT NOT NULL DEFAULT 'unknown'"],
+    ["status", "TEXT NOT NULL DEFAULT 'missed'"],
+    ["triggered_at", "TEXT"],
+    ["linked_trade_key", "TEXT"],
+    ["missed_reason", "TEXT NOT NULL DEFAULT ''"],
+    ["reviewed_at", "TEXT"],
+  ] as const;
+  sqlite.transaction(() => {
+    for (const [name, definition] of opportunityUpgrades) {
+      if (!opportunityColumns.some((column) => column.name === name))
+        sqlite.exec(`ALTER TABLE missed_trades ADD COLUMN ${name} ${definition}`);
+    }
+    sqlite.exec(
+      "CREATE INDEX IF NOT EXISTS missed_trades_status_date ON missed_trades(status, observed_at)",
+    );
+  })();
   // Materialize CSV bounds once so connection and range lookups never scan candle JSON.
   const csvColumns = sqlite.pragma("table_info(market_csv_datasets)") as { name: string }[];
   sqlite.transaction(() => {

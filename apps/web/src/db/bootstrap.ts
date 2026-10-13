@@ -135,7 +135,7 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS attachments (id TEXT PRIMARY KEY, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, data BLOB NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS attachments (id TEXT PRIMARY KEY, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, role TEXT NOT NULL DEFAULT 'general', source_url TEXT, data BLOB NOT NULL, created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS attachments_owner ON attachments(owner_type, owner_id);
 CREATE TABLE IF NOT EXISTS note_templates (id TEXT PRIMARY KEY, name TEXT NOT NULL, content TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS trade_rule_checks (id TEXT PRIMARY KEY, trade_key TEXT NOT NULL, playbook_id TEXT NOT NULL, rule TEXT NOT NULL, followed INTEGER NOT NULL);
@@ -143,7 +143,7 @@ CREATE INDEX IF NOT EXISTS trade_rule_checks_trade ON trade_rule_checks(trade_ke
 CREATE TABLE IF NOT EXISTS progress_rules (id TEXT PRIMARY KEY, title TEXT NOT NULL, stage TEXT NOT NULL, weekdays_json TEXT NOT NULL, created_at TEXT NOT NULL, archived_at TEXT);
 CREATE TABLE IF NOT EXISTS progress_checks (id TEXT PRIMARY KEY, rule_id TEXT NOT NULL, date TEXT NOT NULL, done INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS progress_checks_date ON progress_checks(date);
-CREATE TABLE IF NOT EXISTS missed_trades (id TEXT PRIMARY KEY, symbol TEXT NOT NULL, direction TEXT NOT NULL, observed_at TEXT NOT NULL, playbook_id TEXT, entry REAL, stop REAL, target REAL, notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, archived_at TEXT);
+CREATE TABLE IF NOT EXISTS missed_trades (id TEXT PRIMARY KEY, account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL, symbol TEXT NOT NULL, direction TEXT NOT NULL, timeframe TEXT NOT NULL DEFAULT 'unknown', status TEXT NOT NULL DEFAULT 'missed', observed_at TEXT NOT NULL, triggered_at TEXT, playbook_id TEXT, entry REAL, stop REAL, target REAL, linked_trade_key TEXT REFERENCES trades(key) ON DELETE SET NULL, missed_reason TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', reviewed_at TEXT, created_at TEXT NOT NULL, archived_at TEXT);
 
 INSERT OR IGNORE INTO folders (id, name, kind, created_at) VALUES
   ('all', 'All notes', 'system', '2026-01-01T00:00:00Z'),
