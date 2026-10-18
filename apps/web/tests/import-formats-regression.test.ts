@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
@@ -108,6 +108,13 @@ Exec Time,Symbol,Side,Qty,Price
     format: "metatrader",
     pnl: 10,
     content: `<html>MetaTrader 4 Closed Transactions<table><tr><td>12345</td><td>2026.01.05 09:30</td><td>buy</td><td>1</td><td>eurusd</td><td>100</td><td>0</td><td>0</td><td>2026.01.05 10:00</td><td>110</td><td>0</td><td>0</td><td>0</td><td>10</td></tr></table></html>`,
+  },
+  {
+    format: "oanda",
+    pnl: 10,
+    content: `Symbole,Côté,Type,Qté,Quantité remplie,Limite de Prix,Prix d’arrêt,Prix moyen de la transaction,Statut,Mettre à jour l’heure,Nom,Prix du Take Profit,Prix du Stop Loss,Commission,Stop loss garanti,Numéro de commande
+AAPL,Buy,Market,1,1,,,100,Rempli,2026-01-05 09:30:00,AAPL,,,,,,1001
+AAPL,Sell,Market,1,1,,,110,Rempli,2026-01-05 10:00:00,AAPL,,,,,,1002`,
   },
 ];
 
@@ -256,6 +263,64 @@ it("creates and then reuses a source-identified prop account beside another brok
     duplicates: 2,
   });
 });
+
+it.runIf(Boolean(process.env.OANDA_CSV))(
+  "previews and imports the supplied OANDA French order history file",
+  async () => {
+  db.delete(accounts).run();
+  const oandaContent = readFileSync(process.env.OANDA_CSV!, "utf8");
+  const preview = await post({
+    mode: "preview",
+    content: oandaContent,
+    timeZone: "Europe/Paris",
+  });
+  expect(preview.status).toBe(200);
+  const previewJson = await preview.json();
+  expect(previewJson).toMatchObject({
+    detected: "oanda",
+    needsMapping: false,
+    totals: {
+      executions: 16,
+      symbols: 4,
+      skippedRows: 15,
+    },
+    accountResolution: {
+      status: "create",
+      reason: "new",
+      suggestion: { broker: "OANDA", name: "OANDA" },
+    },
+  });
+
+  const commit = await post({
+    mode: "commit",
+    content: oandaContent,
+    timeZone: "Europe/Paris",
+  });
+  expect(commit.status).toBe(200);
+  const commitJson = await commit.json();
+  expect(commitJson).toMatchObject({
+    inserted: 16,
+    duplicates: 0,
+  });
+  expect(commitJson.accountId).toBeTruthy();
+  expect(db.select().from(accounts).all()).toMatchObject([
+    { id: commitJson.accountId, name: "OANDA", broker: "OANDA", kind: "import" },
+  ]);
+  expect(db.select().from(executions).all()).toHaveLength(16);
+  // Re-importing deduplicates all 16 executions
+  const reimport = await post({
+    mode: "commit",
+    content: oandaContent,
+    timeZone: "Europe/Paris",
+  });
+  expect(reimport.status).toBe(200);
+  expect(await reimport.json()).toMatchObject({
+    accountId: commitJson.accountId,
+    inserted: 0,
+    duplicates: 16,
+  });
+  },
+);
 it.each(cases)(
   "$format previews, saves and reimports without changing trades or reviews",
   async ({ format, content, pnl }) => {

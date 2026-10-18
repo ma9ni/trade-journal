@@ -17,6 +17,8 @@ import { historyFormat, parseHistory } from "./formats/history";
 import { the5ersTradingView } from "./formats/the5ers-tradingview";
 import { propStatement } from "./formats/ftmo-statement";
 import { fxcmStatement } from "./formats/fxcm-statement";
+import { oanda } from "./formats/oanda";
+import { frenchTradingJournal } from "./formats/french-trading-journal";
 import type { ImportFormat, ImportOptions, ParsedImport } from "./types";
 
 /**
@@ -39,6 +41,8 @@ const LEGACY_FORMATS: ImportFormat[] = [
   webull,
   dastrader,
   fxcmStatement,
+  frenchTradingJournal,
+  oanda,
 ];
 
 export const FORMATS: ImportFormat[] = [...LEGACY_FORMATS, historyFormat];
