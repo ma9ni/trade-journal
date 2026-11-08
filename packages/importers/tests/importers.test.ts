@@ -320,4 +320,43 @@ AAPL,Sell,Cancelled,0/10,0/0,`;
     expect(result.executions[0]!.quantity).toBe(5); // filled, not total
     expect(result.executions[0]!.price).toBe(185.5); // avg fill price
   });
+
+  it("an OANDA order history export in French imports fills, drops cancelled orders, and preserves fees", () => {
+    const csv = `Symbole,Côté,Type,Qté,Quantité remplie,Limite de Prix,Prix d’arrêt,Prix moyen de la transaction,Statut,Mettre à jour l’heure,Nom,Prix du Take Profit,Prix du Stop Loss,Commission,Stop loss garanti,Numéro de commande
+XAUUSD,Buy,Limite,0.14,0,4139.83,,,Annulé,2026-10-06 15:51:07,XAUUSD,4179.00,4132.97,,,56646563
+XAUUSD,Buy,Limite,0.11,0.11,4139.73,,4139.73,Rempli,2026-10-06 22:44:23,XAUUSD,4179.00,4132.97,-0.32,,56666222
+XAUUSD,Sell,Marché,0.11,0.11,,,4132.96,Rempli,2026-10-07 07:16:54,XAUUSD,,,-0.32,,56674013`;
+    const result = parseAuto(csv)!;
+    expect(result.format).toBe("oanda");
+    expect(result.executions).toHaveLength(2);
+    expect(result.skippedRows).toBe(1);
+    expect(result.accountHint).toEqual({ broker: "OANDA", name: "OANDA" });
+    expect(result.executions[0]).toMatchObject({
+      symbol: "XAUUSD",
+      side: "buy",
+      quantity: 0.11,
+      price: 4139.73,
+      fee: 0.32,
+    });
+    expect(result.executions[1]).toMatchObject({
+      symbol: "XAUUSD",
+      side: "sell",
+      quantity: 0.11,
+      price: 4132.96,
+      fee: 0.32,
+    });
+  });
+
+  it("an OANDA order history export in English correctly parses filled orders", () => {
+    const csv = `Symbol,Side,Type,Qty,Filled Qty,Price Limit,Stop Price,Average Execution Price,Status,Update Time,Name,Take Profit Price,Stop Loss Price,Commission,Guaranteed Stop Loss,Order Number
+EUR_USD,Buy,Market,10000,10000,,,1.08500,Filled,2026-10-08 10:00:00,EUR_USD,,,0.00,,12345
+EUR_USD,Sell,Limit,10000,0,1.09000,,,Cancelled,2026-10-08 10:30:00,EUR_USD,,,0.00,,12346
+EUR_USD,Sell,Market,10000,10000,,,1.08750,Filled,2026-10-08 11:00:00,EUR_USD,,,0.00,,12347`;
+    const result = parseAuto(csv)!;
+    expect(result.format).toBe("oanda");
+    expect(result.executions).toHaveLength(2);
+    expect(result.skippedRows).toBe(1);
+    expect(result.executions[0]!.symbol).toBe("EUR_USD");
+    expect(result.executions[0]!.price).toBe(1.085);
+  });
 });

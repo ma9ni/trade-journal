@@ -30,18 +30,26 @@ export interface FillsFormatSpec {
 
 export const parseSide = (value: string | undefined): "buy" | "sell" | null => {
   if (!value) return null;
-  const text = value.trim().toLowerCase();
+  const text = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
   // "bid"/"ask" per TopstepX fills exports: bid = buy interest, ask = sell.
   if (
-    /^(buy|bot|bought|long|b|bid|btc|buytoopen|buytoclose|buy to open|buy to close)$/.test(text) ||
-    /^buy/.test(text)
+    /^(buy|bot|bought|long|b|bid|btc|buytoopen|buytoclose|buy to open|buy to close|achat|achete)$/.test(
+      text,
+    ) ||
+    /^buy/.test(text) ||
+    /^achat/.test(text)
   )
     return "buy";
   if (
-    /^(sell|sld|sold|short|s|ask|stc|selltoopen|selltoclose|sell to open|sell to close)$/.test(
+    /^(sell|sld|sold|short|s|ask|stc|selltoopen|selltoclose|sell to open|sell to close|vente|vendu)$/.test(
       text,
     ) ||
-    /^sell/.test(text)
+    /^sell/.test(text) ||
+    /^vente/.test(text)
   )
     return "sell";
   return null;
@@ -127,13 +135,18 @@ export const makeFillsFormat = (spec: FillsFormatSpec): ImportFormat => ({
         accountIds.length > 1
           ? ["This file contains multiple source accounts; choose a destination account."]
           : [],
-      ...(externalId && spec.account
+      ...(spec.account
         ? {
-            accountHint: {
-              externalId,
-              broker: spec.account.broker,
-              name: `${spec.account.namePrefix ?? spec.account.broker} · ${externalId}`,
-            },
+            accountHint: externalId
+              ? {
+                  externalId,
+                  broker: spec.account.broker,
+                  name: `${spec.account.namePrefix ?? spec.account.broker} · ${externalId}`,
+                }
+              : {
+                  broker: spec.account.broker,
+                  name: spec.account.namePrefix ?? spec.account.broker,
+                },
           }
         : {}),
     };

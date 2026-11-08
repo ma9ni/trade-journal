@@ -58,8 +58,13 @@ export const parseCsv = (content: string, delimiter?: string): string[][] => {
   return rows;
 };
 
-/** Case/space/punctuation-insensitive header key: "Fill Price ($)" → "fillprice". */
-export const headerKey = (header: string): string => header.toLowerCase().replace(/[^a-z0-9]/g, "");
+/** Case/space/punctuation-insensitive header key: "Fill Price ($)" → "fillprice", "Côté" → "cote". */
+export const headerKey = (header: string): string =>
+  header
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 
 export type Row = Record<string, string>;
 

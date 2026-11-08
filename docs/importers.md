@@ -27,6 +27,7 @@ Two validation tiers:
 | Tradervue                          | fills                        | header signature                      | ✅ (docs³)     | ☐         |
 | TradingView (paper history)        | fills                        | `Fill Price` header                   | ✅ (docs)      | ☐         |
 | MetaTrader 4 (HTML statement)      | trades → reconstructed fills | HTML + MetaTrader markers             | ☐              | ☐         |
+| French trading journal CSV         | trades → reconstructed fills | `Ticket`/`Ouvrir`/two `Prix` columns  | ✅ (fixture)   | ✅        |
 | Interactive Brokers (activity CSV) | fills                        | `Trades,Header` section rows          | ☐              | ☐         |
 | Interactive Brokers (Flex Query)   | fills                        | `ClientAccountID`/`Date/Time` headers | ✅¹            | ☐         |
 | ThinkorSwim / Schwab (statement)   | fills                        | `Account Trade History` section       | ✅¹            | ☐         |
